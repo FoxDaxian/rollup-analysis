@@ -1,0 +1,15 @@
+.DS_Store
+/node_modules
+.gobble*
+dist
+_actual
+_actual.js
+coverage
+.commithash
+.idea
+test/_tmp
+test/hooks/tmp
+test/tmp
+test/typescript/typings
+perf/
+.nyc_output/
