@@ -10,6 +10,11 @@ import {
 	HasEffectsContext,
 	InclusionContext
 } from '../../ExecutionContext';
+// keys 初始是这样的
+// {
+// 	Literal: [],
+// 	Program: ['body']
+// };
 import { getAndCreateKeys, keys } from '../../keys';
 import ChildScope from '../../scopes/ChildScope';
 import { ObjectPath, PathTracker } from '../../utils/PathTracker';
@@ -104,6 +109,10 @@ export class NodeBase implements ExpressionNode {
 		parent: Node | { context: AstContext; type: string },
 		parentScope: ChildScope
 	) {
+		// 参考这个网站转义的结果：https://astexplorer.net/
+		// type为当前整个estree的类型
+		// keys是方法，别看岔了！！！
+		// getAndCreateKeys用来递归esTreeNode对象上的所有节点的type，并赋值给keys
 		this.keys = keys[esTreeNode.type] || getAndCreateKeys(esTreeNode);
 		this.parent = parent;
 		this.context = parent.context;
@@ -120,10 +129,13 @@ export class NodeBase implements ExpressionNode {
 	 */
 	bind() {
 		for (const key of this.keys) {
+			// 获取每一个estree块，也就是acron解析出来的块
 			const value = (this as GenericEsTreeNode)[key];
+			// 不能为null或者注解？
 			if (value === null || key === 'annotations') continue;
 			if (Array.isArray(value)) {
 				for (const child of value) {
+					// TODO:这个bind是acorn产出的ast中自带的？还是什么？没看明白
 					if (child !== null) child.bind();
 				}
 			} else {

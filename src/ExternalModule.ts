@@ -80,6 +80,7 @@ export default class ExternalModule {
 	}
 
 	warnUnusedImports() {
+		// 找到所有没有被引入的模块
 		const unused = Object.keys(this.declarations).filter(name => {
 			if (name === '*') return false;
 			const declaration = this.declarations[name];

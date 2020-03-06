@@ -8,9 +8,11 @@ export function assignChunkColouringHashes(
 	entryModules: Module[],
 	manualChunkModules: Record<string, Module[]>
 ) {
+	// analyzeModuleGraph分析图，获取依赖模块和动态导入模块？
 	const { dependentEntryPointsByModule, dynamicImportersByModule } = analyzeModuleGraph(
 		entryModules
 	);
+	// 获取动态依赖模块入口点
 	const dynamicDependentEntryPointsByDynamicEntry: DependentModuleMap = getDynamicDependentEntryPoints(
 		dependentEntryPointsByModule,
 		dynamicImportersByModule
@@ -26,7 +28,9 @@ export function assignChunkColouringHashes(
 		const modulesToHandle = new Set([entry]);
 		for (const module of modulesToHandle) {
 			if (manualChunkAlias) {
+				// 这不多余吗？
 				module.manualChunkAlias = manualChunkAlias;
+				// 添加hash
 				module.entryPointsHash = colour;
 			} else if (
 				dynamicDependentEntryPoints &&
@@ -37,9 +41,11 @@ export function assignChunkColouringHashes(
 			) {
 				continue;
 			} else {
+				// 重置hash
 				Uint8ArrayXor(module.entryPointsHash, colour);
 			}
 			for (const dependency of module.dependencies) {
+				// 将非外部依赖模块push到循环中，继续分析，可以不用递归了
 				if (!(dependency instanceof ExternalModule || dependency.manualChunkAlias)) {
 					modulesToHandle.add(dependency);
 				}
@@ -64,6 +70,7 @@ export function assignChunkColouringHashes(
 		return true;
 	}
 
+	// 给每个入口模块都加上hash
 	if (manualChunkModules) {
 		for (const chunkName of Object.keys(manualChunkModules)) {
 			const entryHash = randomUint8Array(10);

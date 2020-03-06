@@ -196,8 +196,9 @@ export default class Graph {
 			this.getModuleContext = () => this.context;
 		}
 
-		// 传递acorn提供的参数
+		// input option传递给acorn的参数
 		this.acornOptions = options.acorn ? { ...options.acorn } : {};
+		// acorn的插件
 		const acornPluginsToInject = [];
 
 		// injectImportMeta: 支持 import.meta， 用于 script标签 type 为module的情况
@@ -214,7 +215,7 @@ export default class Graph {
 				? [acornInjectPlugins]
 				: [])
 		);
-		// 设置acorn插件
+		// 初始化acorn解析器
 		this.acornParser = acorn.Parser.extend(...acornPluginsToInject);
 
 		// TODO：初始化moduleLoader实例，这又是干嘛的？
@@ -252,7 +253,7 @@ export default class Graph {
 			// 	newEntryModules
 			// }
 			this.moduleLoader.addEntryModules(normalizeEntryModules(entryModules), true),
-			// 下面的将chunk自定义转换成函数
+			// TODO:下面的将chunk自定义转换成函数，并没有在then中读取回调，这块晚点再确认一下
 			(manualChunks &&
 				typeof manualChunks === 'object' &&
 				this.moduleLoader.addManualChunks(manualChunks)) as Promise<void>
@@ -264,7 +265,7 @@ export default class Graph {
 				throw new Error('You must supply options.input to rollup');
 			}
 			for (const module of this.moduleById.values()) {
-				// moduleById是 id => module 的存储
+				// moduleById是 id => module 的存储， 是所有合法的入口模块
 
 				// 获取所有Module，根据类型添加到不同的容器中
 				if (module instanceof Module) {
@@ -275,19 +276,22 @@ export default class Graph {
 			}
 			timeEnd('parse modules', 2);
 
-			// 进入第二阶段：分析，第一阶段为加载和解析
+			// 进入第二阶段：分析，第一阶段为加载、解析和挂载
 			this.phase = BuildPhase.ANALYSE;
 
 			// Phase 2 - linking. We populate the module dependency links and
 			// determine the topological execution order for the bundle
 			timeStart('analyse dependency graph', 2);
 
-			// 从这里开始看=========
 			// entryModules 入口的rollup模块
+			// 找到个依赖的正确的、有效的拓扑关系
+			// 获取所有入口，找到入口的依赖，删除无效的依赖，过滤出真正的入口启动rolluop模块
 			this.link(entryModules);
 
+			// 依赖拓扑关系分析完成!!!
 			timeEnd('analyse dependency graph', 2);
 
+			// 标记所有的引入语法
 			// Phase 3 – marking. We include all statements that should be included
 			timeStart('mark included statements', 2);
 
@@ -300,21 +304,30 @@ export default class Graph {
 				}
 			}
 			for (const module of entryModules) {
-				// 包括所有入口？
+				// 引入所有的导出，设定相关关系？
 				module.includeAllExports();
 			}
+			// 给引入的模块做标记？
 			this.includeMarked(this.modules);
 
+			// 检查所有没使用的模块，进行提示警告，但没有删除
 			// check for unused external imports
 			for (const externalModule of this.externalModules) externalModule.warnUnusedImports();
 
 			timeEnd('mark included statements', 2);
 
+			// 终于快到最后一步，满脸的心酸，这还仅仅是rollup.rollup方法，不包括生成和写入、、、
+			// 构建块，但是在生成导入和导出之前，使用入口点图着色优化块
+
 			// Phase 4 – we construct the chunks, working out the optimal chunking using
 			// entry point graph colouring, before generating the import and export facades
 			timeStart('generate chunks', 2);
 
+			// preserveModules用(为每个模块创建一个chunk)代替根据关系创建尽可能少的模块，默认为false，不开启
+			// inlineDynamicImports将动态导入的模块内敛到一个模块中，默认为false，不开启
+			// 如果都是取的默认值的话，进入判断
 			if (!this.preserveModules && !inlineDynamicImports) {
+				// TODO:给每个入口模块添加hash，暂时不知道有啥用，先继续看
 				assignChunkColouringHashes(entryModules, manualChunkModulesByAlias);
 			}
 
@@ -322,20 +335,29 @@ export default class Graph {
 			//       exposed as an unresolvable export * (to a graph external export *,
 			//       either as a namespace import reexported or top-level export *)
 			//       should be made to be its own entry point module before chunking
+
 			let chunks: Chunk[] = [];
+
+			// 为每个模块都创建chunk
 			if (this.preserveModules) {
+				// 遍历入口模块
 				for (const module of this.modules) {
+					// 新建chunk实例对象
 					const chunk = new Chunk(this, [module]);
+					// 是入口模块，并且非空
 					if (module.isEntryPoint || !chunk.isEmpty) {
 						chunk.entryModules = [module];
 					}
 					chunks.push(chunk);
 				}
 			} else {
+				// 创建尽可能少的chunk
 				const chunkModules: { [entryHashSum: string]: Module[] } = {};
 				for (const module of this.modules) {
+					// 将之前设置的hash值转换为string
 					const entryPointsHashStr = Uint8ArrayToHexString(module.entryPointsHash);
 					const curChunk = chunkModules[entryPointsHashStr];
+					// 有的话，添加module，没有的话创建并添加，相同的hash值会添加到一起
 					if (curChunk) {
 						curChunk.push(module);
 					} else {
@@ -343,14 +365,18 @@ export default class Graph {
 					}
 				}
 
+				// 将同一hash值的chunks们排序后，添加到chunks中
 				for (const entryHashSum in chunkModules) {
 					const chunkModulesOrdered = chunkModules[entryHashSum];
+					// 根据之前的设定的index排序，这个应该代表引入的顺序，或者执行的先后顺序
 					sortByExecutionOrder(chunkModulesOrdered);
+					// 用排序后的chunkModulesOrdered新建chunk
 					const chunk = new Chunk(this, chunkModulesOrdered);
 					chunks.push(chunk);
 				}
 			}
 
+			// 真的开始处理各个chunk了啊
 			for (const chunk of chunks) {
 				chunk.link();
 			}
@@ -428,12 +454,16 @@ export default class Graph {
 	}
 
 	private link(entryModules: Module[]) {
+		// 上个方法内获取到的modules
 		for (const module of this.modules) {
-			// 找到依赖？
+			// 找到所有的依赖
 			module.linkDependencies();
 		}
 		// 入口模块依赖解析
+		// 分析完整的入口模块
+		// 返回所有的入口启动模块(也就是非外部模块)，和那些依赖了一圈结果成死循环的模块相对路径
 		const { orderedModules, cyclePaths } = analyseModuleExecution(entryModules);
+		// 对那些死循环路径进行警告
 		for (const cyclePath of cyclePaths) {
 			this.warn({
 				code: 'CIRCULAR_DEPENDENCY',
@@ -442,11 +472,15 @@ export default class Graph {
 				message: `Circular dependency: ${cyclePath.join(' -> ')}`
 			});
 		}
+		// 过滤出真正的入口启动模块，赋值给modules
 		this.modules = orderedModules;
+
 		for (const module of this.modules) {
-			// 这个是干啥的？
+			// TODO:这个是干啥的？ 这是link里面的，没看太明白，先跳过吧
 			module.bindReferences();
 		}
+
+		// 获取导出内容，没有的话就报错
 		this.warnForMissingExports();
 	}
 
@@ -454,6 +488,7 @@ export default class Graph {
 		for (const module of this.modules) {
 			for (const importName of Object.keys(module.importDescriptions)) {
 				const importDescription = module.importDescriptions[importName];
+				// 获取导出内容，没有的话就报错
 				if (
 					importDescription.name !== '*' &&
 					!(importDescription.module as Module).getVariableForExportName(importDescription.name)

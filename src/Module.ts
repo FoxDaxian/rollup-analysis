@@ -122,12 +122,14 @@ export const defaultAcornOptions: acorn.Options = {
 	sourceType: 'module'
 };
 
+// 利用acorn解析，得到estree
 function tryParse(module: Module, Parser: typeof acorn.Parser, acornOptions: acorn.Options) {
 	try {
 		return Parser.parse(module.code, {
 			...defaultAcornOptions,
 			...acornOptions,
 			onComment: (block: boolean, text: string, start: number, end: number) =>
+				// 将转义结果赋值给当前入口对应的rollup模块
 				module.comments.push({ block, text, start, end })
 		});
 	} catch (err) {
@@ -384,10 +386,13 @@ export default class Module {
 	}
 
 	getOrCreateNamespace(): NamespaceVariable {
+		// 如果当前模块没有命名空间的话
 		if (!this.namespaceVariable) {
+			// 做一些操作。。。
 			this.namespaceVariable = new NamespaceVariable(this.astContext, this.syntheticNamedExports);
 			this.namespaceVariable.initialise();
 		}
+		// 返回这个命名
 		return this.namespaceVariable;
 	}
 
@@ -438,7 +443,9 @@ export default class Module {
 		isExportAllSearch?: boolean,
 		searchedNamesAndModules?: Map<string, Set<Module | ExternalModule>>
 	): Variable {
+		// 第一个为*的时候
 		if (name[0] === '*') {
+			// 如果只有一个*
 			if (name.length === 1) {
 				return this.getOrCreateNamespace();
 			} else {
@@ -520,14 +527,20 @@ export default class Module {
 	}
 
 	includeAllExports() {
+		// 是否已经执行过(引入过)
 		if (!this.isExecuted) {
 			this.graph.needsTreeshakingPass = true;
+			// 标记当前模块是已执行过的
 			markModuleAndImpureDependenciesAsExecuted(this);
 		}
 
+		// 又创建了一个另一个上下文环境
 		const context = createInclusionContext();
+		// 遍历所有的导出的key
 		for (const exportName of this.getExports()) {
+			// 获取导出的内容
 			const variable = this.getVariableForExportName(exportName);
+			// 未实现，待猜想
 			variable.deoptimizePath(UNKNOWN_PATH);
 			if (!variable.included) {
 				variable.include(context);
@@ -535,8 +548,11 @@ export default class Module {
 			}
 		}
 
+		// 遍历正则类导出？
 		for (const name of this.getReexports()) {
+			// 获取导出的内容
 			const variable = this.getVariableForExportName(name);
+			// 未实现，待猜想
 			variable.deoptimizePath(UNKNOWN_PATH);
 			if (!variable.included) {
 				variable.include(context);
@@ -635,7 +651,8 @@ export default class Module {
 
 		// 获取esTreeAst
 		this.esTreeAst = ast || tryParse(this, this.graph.acornParser, this.graph.acornOptions);
-		// 注释相关方法
+		// 传入注释和acorn生成的estree
+		// TODO： 感觉是通过这个方法格式化estree的
 		markPureCallExpressions(this.comments, this.esTreeAst);
 
 		timeEnd('generate ast', 3);
@@ -699,7 +716,6 @@ export default class Module {
 		// 设置全局域和当前的ast上下文环境，这样有进一步延展了相互关系
 		this.scope = new ModuleScope(this.graph.scope, this.astContext);
 
-		// 看到link里的bindreference，但是那里用到了ast，需要搞清楚ast(estree是什么东西)大概是这样吧，从这里看起哦
 		// 新建了个Program的实例对象给this.ast
 		this.ast = new Program(
 			this.esTreeAst,

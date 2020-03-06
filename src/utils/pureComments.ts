@@ -42,6 +42,6 @@ const isPureComment = (comment: CommentDescription) => pureCommentRegex.test(com
 export function markPureCallExpressions(comments: CommentDescription[], esTreeAst: ESTree.Program) {
 	handlePureAnnotationsOfNode(esTreeAst as any, {
 		commentIndex: 0,
-		commentNodes: comments.filter(isPureComment)
+		commentNodes: comments.filter(isPureComment) // pure开头的注释
 	});
 }

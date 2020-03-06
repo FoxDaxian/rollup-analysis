@@ -223,6 +223,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 		// buildStart钩子函数触发
 		await graph.pluginDriver.hookParallel('buildStart', [inputOptions]);
 		// TODO: 构建打包，这个需要具体分析了，这个是核心
+		// 这一步通过id，深度分析拓扑关系，去除无用块，进而生成我们的chunks
 		chunks = await graph.build(
 			inputOptions.input as string | string[] | Record<string, string>,
 			inputOptions.manualChunks,
