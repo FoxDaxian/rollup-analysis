@@ -190,6 +190,11 @@ export class PluginDriver {
 		return arg0;
 	}
 
+
+	// const concatSep = (out: string, next: string) => (next ? `${out}\n${next}` : out);
+	// const concatDblSep = (out: string, next: string) => (next ? `${out}\n\n${next}` : out);
+	// 参数参考: 'banner', evalIfFn(options.banner), [], concatSep
+
 	// chains, reduces returns of type R, to type T, handling the reduced value separately. permits hooks as values.
 	hookReduceValue<H extends keyof Plugin, R = any, T = any>(
 		hookName: H,

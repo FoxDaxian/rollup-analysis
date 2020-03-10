@@ -30,6 +30,7 @@ export function createAddons(
 	outputPluginDriver: PluginDriver
 ): Promise<Addons> {
 	return Promise.all([
+		// 并行执行这些钩子
 		outputPluginDriver.hookReduceValue('banner', evalIfFn(options.banner), [], concatSep),
 		outputPluginDriver.hookReduceValue('footer', evalIfFn(options.footer), [], concatSep),
 		outputPluginDriver.hookReduceValue('intro', evalIfFn(options.intro), [], concatDblSep),

@@ -378,10 +378,13 @@ export default class Graph {
 
 			// 真的开始处理各个chunk了啊
 			for (const chunk of chunks) {
+				// 将依赖挂载到每个chunk上
 				chunk.link();
 			}
+			// 过滤
 			chunks = chunks.filter(isChunkRendered);
 			const facades: Chunk[] = [];
+			// 生成一个东西
 			for (const chunk of chunks) {
 				facades.push(...chunk.generateFacades());
 			}
@@ -389,6 +392,7 @@ export default class Graph {
 			timeEnd('generate chunks', 2);
 
 			this.phase = BuildPhase.GENERATE;
+			// 把生成的东西，追加到chunks后面，有啥用捏?
 			return chunks.concat(facades);
 		});
 	}

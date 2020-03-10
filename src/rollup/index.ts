@@ -82,12 +82,13 @@ function applyOptionHook(inputOptions: InputOptions, plugin: Plugin) {
 }
 
 function normalizePlugins(rawPlugins: any, anonymousPrefix: string): Plugin[] {
-	// 转换操作进而肯定得到plugins
+	// 转换操作进而肯定得到plugins数组
 	const plugins = ensureArray(rawPlugins);
 	// 如果当前plugin没有name属性，那么主动设置改plugin在所有插件中的位置和一个前缀
 	for (let pluginIndex = 0; pluginIndex < plugins.length; pluginIndex++) {
 		const plugin = plugins[pluginIndex];
 		if (!plugin.name) {
+			// 设置plugin的名字为 匿名字首 + 当前插件的索引
 			plugin.name = `${anonymousPrefix}${pluginIndex + 1}`;
 		}
 	}
@@ -209,7 +210,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 
 	curWatcher = undefined as any;
 
-	// 创建图表后，移除cache选项，因为不在使用
+	// 创建图表后，移除cache选项，因为不再使用
 	// remove the cache option from the memory after graph creation (cache is not used anymore)
 	const useCache = rawInputOptions.cache !== false;
 	delete inputOptions.cache;
@@ -224,7 +225,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 		await graph.pluginDriver.hookParallel('buildStart', [inputOptions]);
 		// TODO: 构建打包，这个需要具体分析了，这个是核心
 		// 这一步通过id，深度分析拓扑关系，去除无用块，进而生成我们的chunks
-		chunks = await graph.build(
+		chunks = await graph.build( // 这个chunks是闭包，所以generate和write可以用到
 			inputOptions.input as string | string[] | Record<string, string>,
 			inputOptions.manualChunks,
 			inputOptions.inlineDynamicImports!
@@ -252,45 +253,76 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 		if (!rawOutputOptions) {
 			throw new Error('You must supply an options object');
 		}
+		// 又创建了一个插件驱动器
 		const outputPluginDriver = graph.pluginDriver.createOutputPluginDriver(
+			// 统一化插件
 			normalizePlugins(rawOutputOptions.plugins, ANONYMOUS_OUTPUT_PLUGIN_PREFIX)
 		);
 
+		// 返回标准化之后的output配置，和插件驱动器
 		return {
 			outputOptions: normalizeOutputOptions(
+				// 入口配置
 				inputOptions as GenericConfigObject,
+				// 原始输出配置
 				rawOutputOptions,
+				// 是否有多个块
 				chunks.length > 1,
+				// 插件驱动器
 				outputPluginDriver
 			),
+			// 插件驱动器
 			outputPluginDriver
 		};
 	}
 
 	async function generate(
-		outputOptions: OutputOptions,
-		isWrite: boolean,
-		outputPluginDriver: PluginDriver
+		outputOptions: OutputOptions, // 输出配置
+		isWrite: boolean, // 是否写入
+		outputPluginDriver: PluginDriver // 输出的插件驱动器
 	): Promise<OutputBundle> {
+		// GENERATE阶段
 		timeStart('GENERATE', 1);
 
+		// assetFileNames定义资源路径和文件名
 		const assetFileNames = outputOptions.assetFileNames || 'assets/[name]-[hash][extname]';
+		// getAbsoluteEntryModulePaths: 如果是绝对路径，那么添加到数组，将这个数组返回
+		// commondir: 计算出这些目录的相同根目录，也就是交集
+		// inputBase: 计算出这些目录的相同根目录，也就是交集
 		const inputBase = commondir(getAbsoluteEntryModulePaths(chunks));
+
+		// 打包输出？如果对象含有type: placeholders，那么就是特殊的
 		const outputBundleWithPlaceholders: OutputBundleWithPlaceholders = Object.create(null);
+
+		// 给fileEmitter和assetFileNames上挂载资源
 		outputPluginDriver.setOutputBundle(outputBundleWithPlaceholders, assetFileNames);
+
 		let outputBundle;
 
 		try {
+			// 执行renderStart钩子函数，该钩子主要用来获取和更改input和output配置
 			await outputPluginDriver.hookParallel('renderStart', [outputOptions, inputOptions]);
+
+			// 处理 footer banner intro outro这些
 			const addons = await createAddons(outputOptions, outputPluginDriver);
+
 			for (const chunk of chunks) {
+				// 尽可能少的打包模块
+				// 设置chunk的exportNames
 				if (!inputOptions.preserveModules) chunk.generateInternalExports(outputOptions);
+
+				// 尽可能多的打包模块
 				if (inputOptions.preserveModules || (chunk.facadeModule && chunk.facadeModule.isEntryPoint))
+					// 根据导出，去推断chunk的导出模式
 					chunk.exportMode = getExportMode(chunk, outputOptions, chunk.facadeModule!.id);
 			}
+
+			// 预渲染？
 			for (const chunk of chunks) {
 				chunk.preRender(outputOptions, inputBase);
 			}
+
+			// 优化chunk
 			if (!optimized && inputOptions.experimentalOptimizeChunks) {
 				optimizeChunks(chunks, outputOptions, inputOptions.chunkGroupingSize!, inputBase);
 				optimized = true;
@@ -347,12 +379,14 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 	const result: RollupBuild = {
 		cache: cache!,
 		generate: ((rawOutputOptions: GenericConfigObject) => {
+			// 过滤output配置选项，并创建output的插件驱动器
 			const { outputOptions, outputPluginDriver } = getOutputOptionsAndPluginDriver(
 				rawOutputOptions
 			);
 			const promise = generate(outputOptions, false, outputPluginDriver).then(result =>
 				createOutput(result)
 			);
+			// 丢弃老版本字段
 			Object.defineProperty(promise, 'code', throwAsyncGenerateError);
 			Object.defineProperty(promise, 'map', throwAsyncGenerateError);
 			return promise;
@@ -482,6 +516,17 @@ function writeOutputFile(
 		.then(() => {});
 }
 
+// 其中之一传入的参数
+// 入口配置
+// inputOptions,
+// 原始输出配置
+// rawOutputOptions,
+// 是否有多个块
+// chunks.length > 1,
+// 插件驱动器
+// outputPluginDriver
+
+// 标准化操作
 function normalizeOutputOptions(
 	inputOptions: GenericConfigObject,
 	rawOutputOptions: GenericConfigObject,
@@ -492,18 +537,25 @@ function normalizeOutputOptions(
 		config: {
 			output: {
 				...rawOutputOptions,
+				// 可以用output里的覆盖
 				...(rawOutputOptions.output as object),
+				// 不过input里的output优先级最高，但是不是每个地方都返回，有的不会使用
 				...(inputOptions.output as object)
 			}
 		}
 	});
 
+	// 如果merge过程中出错了
 	if (mergedOptions.optionError) throw new Error(mergedOptions.optionError);
 
 	// now outputOptions is an array, but rollup.rollup API doesn't support arrays
+	// 获取output第一项
 	const mergedOutputOptions = mergedOptions.outputOptions[0];
+
 	const outputOptionsReducer = (outputOptions: OutputOptions, result: OutputOptions) =>
 		result || outputOptions;
+
+	// 触发钩子函数
 	const outputOptions = outputPluginDriver.hookReduceArg0Sync(
 		'outputOptions',
 		[mergedOutputOptions],
@@ -518,8 +570,10 @@ function normalizeOutputOptions(
 		}
 	);
 
+	// 检查经过插件处理过的output配置
 	checkOutputOptions(outputOptions);
 
+	// output.file 和 output.dir是互斥的
 	if (typeof outputOptions.file === 'string') {
 		if (typeof outputOptions.dir === 'string')
 			return error({

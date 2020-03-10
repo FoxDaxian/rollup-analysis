@@ -221,13 +221,17 @@ export class FileEmitter {
 			assetFileNames,
 			bundle: outputBundle
 		};
+		// 遍历value
 		for (const emittedFile of this.filesByReferenceId.values()) {
 			if (emittedFile.fileName) {
+				// 在bundle中保留文件名
 				reserveFileNameInBundle(emittedFile.fileName, this.output.bundle, this.graph);
 			}
 		}
+		// 遍历set
 		for (const [referenceId, consumedFile] of this.filesByReferenceId.entries()) {
 			if (consumedFile.type === 'asset' && consumedFile.source !== undefined) {
+				// 给output上绑定资源
 				this.finalizeAsset(consumedFile, consumedFile.source, referenceId, this.output);
 			}
 		}

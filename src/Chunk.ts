@@ -329,6 +329,7 @@ export default class Chunk {
 				if (!this.exportNames[suggestedName]) {
 					this.exportNames[suggestedName] = variable;
 				} else {
+					// 避免重复和关键字
 					do {
 						safeExportName = toBase64(++i);
 						// skip past leading number identifiers
@@ -409,8 +410,10 @@ export default class Chunk {
 		const dependencies: Set<Chunk | ExternalModule> = new Set();
 		const dynamicDependencies: Set<Chunk | ExternalModule> = new Set();
 		for (const module of this.orderedModules) {
+			// 循环将依赖添加到dependencies 和 dynamicDependencies上
 			this.addDependenciesToChunk(module.getTransitiveDependencies(), dependencies);
 			this.addDependenciesToChunk(module.dynamicDependencies, dynamicDependencies);
+			// TODO: 装载吧？
 			this.setUpChunkImportsAndExportsForModule(module);
 		}
 		this.dependencies = Array.from(dependencies);
@@ -523,36 +526,50 @@ export default class Chunk {
 		this.preRender(options, inputBase);
 	}
 
+	// 在prerender中，允许chunk的哈希值和命名改变、生成，在最终阶段只在
 	// prerender allows chunk hashes and names to be generated before finalizing
 	preRender(options: OutputOptions, inputBase: string) {
 		timeStart('render modules', 3);
 
+		// 是否开启紧凑模式：options.compact
+		// 调用: https://github.com/rich-harris/magic-string#readme
 		const magicString = new MagicStringBundle({ separator: options.compact ? '' : '\n\n' });
 		this.usedModules = [];
+		// 排序模块: orderedModules
+		// 不开启紧凑的话就使用猜测的用户的缩进方式
 		this.indentString = options.compact ? '' : getIndentString(this.orderedModules, options);
 
 		const n = options.compact ? '' : '\n';
 		const _ = options.compact ? '' : ' ';
 
+		// 初始化render配置
 		const renderOptions: RenderOptions = {
-			compact: options.compact as boolean,
-			dynamicImportFunction: options.dynamicImportFunction as string,
-			format: options.format as string,
+			compact: options.compact as boolean, // 紧凑
+			dynamicImportFunction: options.dynamicImportFunction as string, // 将动态导入的方法定义为用户想要用的名字，便于与polyfill结合使用
+			format: options.format as string, // 打包格式
 			freeze: options.freeze !== false,
 			indent: this.indentString,
-			namespaceToStringTag: options.namespaceToStringTag === true,
-			varOrConst: options.preferConst ? 'const' : 'var'
+			namespaceToStringTag: options.namespaceToStringTag === true, // 设置符合标准的toString
+			varOrConst: options.preferConst ? 'const' : 'var' // 用const还是var捏
 		};
 
+		// 从这开始，是分析chunk的依赖关系部分
+		// ====================
+
 		// Make sure the direct dependencies of a chunk are present to maintain execution order
+		// 保持依赖的执行顺序
 		for (const { module } of this.imports) {
+			// 不是外部依赖的话就是入口模块，取入口模块的依赖chunk，是的话直接使用
 			const chunkOrExternal = (module instanceof Module ? module.chunk : module) as
 				| Chunk
 				| ExternalModule;
+
+			// 当前chunk不在import里的也添加到依赖中？
 			if (this.dependencies.indexOf(chunkOrExternal) === -1) {
 				this.dependencies.push(chunkOrExternal);
 			}
 		}
+
 		// for static and dynamic entry points, inline the execution list to avoid loading latency
 		if (
 			options.hoistTransitiveImports !== false &&
@@ -563,17 +580,29 @@ export default class Chunk {
 				if (dep instanceof Chunk) this.inlineChunkDependencies(dep, true);
 			}
 		}
+
 		// prune empty dependency chunks, inlining their side-effect dependencies
 		for (let i = 0; i < this.dependencies.length; i++) {
 			const dep = this.dependencies[i];
 			if (dep instanceof Chunk && dep.isEmpty) {
+				// 过滤空的chunk，并且提取空chunk中的依赖
+				// 为什么要空的chunk还要提出依赖呢？因为既然依赖这个chunk，肯定需要他暴露出来的东西啦
 				this.dependencies.splice(i--, 1);
 				this.inlineChunkDependencies(dep, false);
 			}
 		}
+
+
+		// ====================
+		// 分析chunk的依赖关系部分结束
+
+		// 对依赖进行执行顺序的排序
 		sortByExecutionOrder(this.dependencies);
 
+		// 动态引入的处理，到这里对动态引入的模块还是没有具象的画面，需要retry
 		this.prepareDynamicImports();
+
+		// TODO: 设置标志符？
 		this.setIdentifierRenderResolutions(options);
 
 		let hoistedSource = '';
@@ -581,10 +610,14 @@ export default class Chunk {
 
 		for (const module of this.orderedModules) {
 			let renderedLength = 0;
+			// 当前模块是否被引用？是的话进行渲染工作了
 			if (module.isIncluded()) {
+				// 代码渲染
 				const source = module.render(renderOptions).trim();
 				if (options.compact && source.lastLine().indexOf('//') !== -1) source.append('\n');
+				// 获取模块命名空间
 				const namespace = module.getOrCreateNamespace();
+
 				if (namespace.included || source.length() > 0) {
 					renderedLength = source.length();
 					this.renderedModuleSources.set(module, source);
@@ -597,6 +630,7 @@ export default class Chunk {
 						else magicString.addSource(new MagicString(rendered));
 					}
 				}
+
 			}
 			const { renderedExports, removedExports } = module.getRenderedExports();
 			renderedModules[module.id] = {
@@ -607,8 +641,10 @@ export default class Chunk {
 			};
 		}
 
+
 		if (hoistedSource) magicString.prepend(hoistedSource + n + n);
 
+		// 添加一些语句
 		if (this.needsExportsShim) {
 			magicString.prepend(
 				`${n}${renderOptions.varOrConst} ${MISSING_EXPORT_SHIM_VARIABLE}${_}=${_}void 0;${n}${n}`
@@ -809,6 +845,7 @@ export default class Chunk {
 		chunkDependencies: Set<Chunk | ExternalModule>
 	) {
 		for (const depModule of moduleDependencies) {
+			// 避免死循环
 			if (depModule.chunk === this) {
 				continue;
 			}
@@ -1080,6 +1117,7 @@ export default class Chunk {
 	}
 
 	private inlineChunkDependencies(chunk: Chunk, deep: boolean) {
+		// 搜寻当前chunk的依赖chunk的依赖，添加到当前chunk的依赖，有点像数组扁平化
 		for (const dep of chunk.dependencies) {
 			if (dep instanceof ExternalModule) {
 				if (this.dependencies.indexOf(dep) === -1) this.dependencies.push(dep);
