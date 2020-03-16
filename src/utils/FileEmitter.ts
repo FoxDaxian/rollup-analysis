@@ -144,6 +144,8 @@ export class FileEmitter {
 	// baseFileEmitter为undefined，先忽略不计
 	constructor(graph: Graph, baseFileEmitter?: FileEmitter) {
 		this.graph = graph;
+		// 对象，可以将引用类型作为key
+		// 结构为： id => 资源
 		this.filesByReferenceId = baseFileEmitter
 			? new Map(baseFileEmitter.filesByReferenceId)
 			: new Map();

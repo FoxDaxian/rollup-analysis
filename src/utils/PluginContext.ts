@@ -51,16 +51,19 @@ export function getPluginContexts(
 	fileEmitter: FileEmitter,
 	watcher: RollupWatcher | undefined
 ): (plugin: Plugin, pluginIndex: number) => PluginContext {
-	// 闭包函数
 	const existingPluginNames = new Set<string>();
+	// 闭包函数
 	return (plugin, pidx) => {
 		// 判断当前plugin是否缓存
-		let cacheable = true;
+		let cacheable = true; // 如果不在existingPluginNames中，那么依然为true: 可缓存
+		// 刚开始是没有cacheKey的，除了第一次只有携带cache的再次进入的时候设置为上一次的cacheKey或者当前插件名
 		if (typeof plugin.cacheKey !== 'string') {
 			if (
+				// 处理rollup格式化的插件名的情况
+				// 不可缓存的情况
 				plugin.name.startsWith(ANONYMOUS_PLUGIN_PREFIX) ||
 				plugin.name.startsWith(ANONYMOUS_OUTPUT_PLUGIN_PREFIX) ||
-				existingPluginNames.has(plugin.name)
+				existingPluginNames.has(plugin.name) // 是否已存在该插件
 			) {
 				cacheable = false;
 			} else {
@@ -75,13 +78,15 @@ export function getPluginContexts(
 		} else if (cacheable) {
 			const cacheKey = plugin.cacheKey || plugin.name;
 			cacheInstance = createPluginCache(
-				pluginCache[cacheKey] || (pluginCache[cacheKey] = Object.create(null))
+				// 在这设置的呀，第一次设置为空对象，之后就可以set了
+				pluginCache[cacheKey] || (pluginCache[cacheKey] = Object.create(null)) // 如果在缓存中，否则为{}
 			);
 		} else {
 			cacheInstance = getCacheForUncacheablePlugin(plugin.name);
 		}
 
 		// 返回上下文环境
+		// 调用插件的时候会将这个上下文注入到this => someHook.call(context, ...);
 		const context: PluginContext = {
 			addWatchFile(id) {
 				if (graph.phase >= BuildPhase.GENERATE) {
@@ -89,6 +94,7 @@ export function getPluginContexts(
 				}
 				graph.watchFiles[id] = true;
 			},
+			// 缓存实例
 			cache: cacheInstance,
 			emitAsset: getDeprecatedContextHandler(
 				(name: string, source?: string | Buffer) =>

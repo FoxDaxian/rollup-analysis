@@ -134,7 +134,7 @@ export default function mergeOptions({
 	const normalizedOutputOptions = Array.isArray(output) ? output : output ? [output] : [];
 	// 如果没有传递output，给一个默认的{}
 	if (normalizedOutputOptions.length === 0) normalizedOutputOptions.push({});
-	// 迭代获取通用的output配置
+	// 如果input中有output，那么将通用的output配置赋值到每个output上
 	const outputOptions = normalizedOutputOptions.map(singleOutputOptions =>
 		getOutputOptions(singleOutputOptions, command)
 	);
@@ -236,6 +236,7 @@ function getInputOptions(
 ): InputOptions {
 	// 高阶函数，返回一个函数，在下面再次调用，获取想要的配置
 	const getOption = createGetOption(config, command);
+	// 下面这些才是真正用到的入口配置
 	const inputOptions: InputOptions = {
 		acorn: config.acorn,
 		acornInjectPlugins: config.acornInjectPlugins as any,

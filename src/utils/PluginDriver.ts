@@ -46,7 +46,7 @@ export class PluginDriver {
 		preserveSymlinks: boolean,
 		// rollup的watcher类
 		watcher: RollupWatcher | undefined,
-		basePluginDriver?: PluginDriver
+		basePluginDriver?: PluginDriver // graph的插件驱动器，也就是最基础的哪一个，之后会在新建的时候使用this传入
 	) {
 		// 调用graph的警告函数，警告避免使用一些已弃用的属性
 		warnDeprecatedHooks(userPlugins, graph);
@@ -67,13 +67,14 @@ export class PluginDriver {
 
 		// 添加内置rollup plugin
 		this.plugins = userPlugins.concat(
+			// 采用内置默认插件或者graph的插件驱动器的插件，不管怎么样，内置默认插件是肯定有的
 			basePluginDriver ? basePluginDriver.plugins : [getRollupDefaultPlugin(preserveSymlinks)]
 		);
-		// 利用map给每个插件注入plugin特有的context
+		// 利用map给每个插件注入plugin特有的context，并缓存
 		this.pluginContexts = this.plugins.map(
 			getPluginContexts(pluginCache, graph, this.fileEmitter, watcher)
 		);
-		// 目前还没发现用到的地方
+		// 处理'根'插件驱动器
 		if (basePluginDriver) {
 			for (const plugin of userPlugins) {
 				for (const hook of basePluginDriver.previousHooks) {

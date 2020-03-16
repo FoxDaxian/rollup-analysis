@@ -33,6 +33,7 @@ export const deprecatedHooks: { active: boolean; deprecated: string; replacement
 	{ active: false, deprecated: 'resolveAssetUrl', replacement: 'resolveFileUrl' }
 ];
 
+
 export function warnDeprecatedHooks(plugins: Plugin[], graph: Graph) {
 	for (const { active, deprecated, replacement } of deprecatedHooks) {
 		for (const plugin of plugins) {

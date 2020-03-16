@@ -74,7 +74,7 @@ const throwAsyncGenerateError = {
 };
 
 function applyOptionHook(inputOptions: InputOptions, plugin: Plugin) {
-	// 如果插件返回的对象含有options属性
+	// 适配插件的options钩子函数
 	if (plugin.options)
 		return plugin.options.call({ meta: { rollupVersion } }, inputOptions) || inputOptions;
 
@@ -109,28 +109,31 @@ function getInputOptions(rawInputOptions: GenericConfigObject): InputOptions {
 		(inputOptions.onwarn as WarningHandler)({ message: optionError, code: 'UNKNOWN_OPTION' });
 
 	// xxx! 叹号断言前面的属性非null或者非undefined
-	// 利用reduce结合plugins
+	// 如果插件中有options钩子函数，并且返回非空，那么用options的结果覆盖当前的未完全配置完毕input配置
+	// 市面上的某些插件用来修改input配置：比如
+	// https://github.com/rollup/plugins/blob/825ef02252cd8fc64adf88473107d9d44404a2fb/packages/multi-entry/src/index.js
+	// 但是官网推荐使用buildStart
 	inputOptions = inputOptions.plugins!.reduce(applyOptionHook, inputOptions);
 
 	// 给所有没有name属性的plugin设置 前缀(ANONYMOUS_PLUGIN_PREFIX) + 在所有plugin中的索引值
 	inputOptions.plugins = normalizePlugins(inputOptions.plugins!, ANONYMOUS_PLUGIN_PREFIX);
 
-	// 将动态导入包内置到一个chunk而不是分包的  相关的代码逻辑
+	// 将动态导入的依赖(import | require.ensure() | other)内嵌到一个chunk而不创建独立的包，相关的代码逻辑如下
 	if (inputOptions.inlineDynamicImports) {
-		// 以原始文件的名字命名，不综合打包
-		if (inputOptions.preserveModules)
+		// preserveModules: 尽可能的保留模块，而不是混合起来，创建更少的chunks，默认为false，不开启
+		if (inputOptions.preserveModules) // 如果开启了，就与内嵌冲突了
 			return error({
 				code: 'INVALID_OPTION',
 				message: `"preserveModules" does not support the "inlineDynamicImports" option.`
 			});
-		// 手动管理如何打包，比如公共包，react相关包，vue相关包等等
-		if (inputOptions.manualChunks)
+		// manualChunks：手动管理如何打包，比如公共包，react相关包，vue相关包等等，和webpack4的SplitChunks类似
+		if (inputOptions.manualChunks) // 同上，冲突了
 			return error({
 				code: 'INVALID_OPTION',
 				message: '"manualChunks" option is not supported for "inlineDynamicImports".'
 			});
 
-		// 实验性的优化打包chunk的功能，如果chunk太大，会按照规则优化
+		// 实验性的优化打包chunk的功能，如果chunk太大，会按照规则优化，文档没找到，反正也是不能一起用啊
 		if (inputOptions.experimentalOptimizeChunks)
 			return error({
 				code: 'INVALID_OPTION',

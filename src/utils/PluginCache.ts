@@ -3,17 +3,18 @@ import { error } from './error';
 import { ANONYMOUS_OUTPUT_PLUGIN_PREFIX, ANONYMOUS_PLUGIN_PREFIX } from './pluginUtils';
 
 export function createPluginCache(cache: SerializablePluginCache): PluginCache {
+	// 利用闭包将cache缓存
 	return {
 		has(id: string) {
 			const item = cache[id];
 			if (!item) return false;
-			item[0] = 0;
+			item[0] = 0; // 如果访问了，那么重置访问过期次数，猜测：就是说明用户有意向主动去使用
 			return true;
 		},
 		get(id: string) {
 			const item = cache[id];
 			if (!item) return undefined;
-			item[0] = 0;
+			item[0] = 0; // 如果访问了，那么重置访问过期次数
 			return item[1];
 		},
 		set(id: string, value: any) {

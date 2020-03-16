@@ -6,6 +6,7 @@ import { basename, dirname, isAbsolute, resolve } from './path';
 export function getRollupDefaultPlugin(preserveSymlinks: boolean): Plugin {
 	return {
 		name: 'Rollup Core',
+		// 默认的模块(文件)加载机制
 		resolveId: createResolveId(preserveSymlinks) as ResolveIdHook,
 		load(id) {
 			return readFile(id);

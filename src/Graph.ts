@@ -90,8 +90,9 @@ export default class Graph {
 		// 警告函数
 		this.onwarn = (options.onwarn as WarningHandler) || makeOnwarn();
 		// (依赖)路径追踪
-		// 是一个由path组成的set对象，每多一个路径，层级就深一层
+		// 路径追踪器，追踪是否有副作用
 		this.deoptimizationTracker = new PathTracker();
+
 		// 创建map
 		this.cachedModules = new Map();
 		// 缓存相关，用于提升监听模式下的构建速度
@@ -103,12 +104,14 @@ export default class Graph {
 
 		// 缓存插件结果
 		if (options.cache !== false) {
+			// 第一次执行的时候，cache肯定为null或者空，所以默认为无原型链的空对象
 			this.pluginCache = (options.cache && options.cache.plugins) || Object.create(null);
 
-			// TODO: 这块的plugin cache是什么格式的？虽然看ts类型定义能明白，但是还是想眼见为实
-			// 增加插件访问的次数
+			// https://rollupjs.org/guide/en/#experimentalcacheexpiry
+			// 每次执行rollup.rollup的时候，给传递的缓存插件的插件们的执行次数 加1，后续如果执行超过 experimentalCacheExpiry 设定的次数后，不在缓存
 			// increment access counter
 			for (const name in this.pluginCache) {
+				// cache为插件返回的对象的属性们 TODO: 到这了
 				const cache = this.pluginCache[name];
 				for (const key of Object.keys(cache)) cache[key][0]++;
 			}
@@ -180,6 +183,8 @@ export default class Graph {
 
 		// TODO：一个操作Map的类，具体干啥的？
 		this.scope = new GlobalScope();
+		// 可设置模块的上下文，默认是undefined，可以设置成window等等
+		// 用来设置模块全局上下文(this)的
 		this.context = String(options.context);
 
 		// 用户是否自定义了上下文环境
@@ -215,10 +220,11 @@ export default class Graph {
 				? [acornInjectPlugins]
 				: [])
 		);
+		// https://github.com/acornjs/acorn#plugin-developments  扩展acorn
 		// 初始化acorn解析器
 		this.acornParser = acorn.Parser.extend(...acornPluginsToInject);
 
-		// TODO：初始化moduleLoader实例，这又是干嘛的？
+		// 模块(文件)解析加载，内部调用的resolveID和load等钩子，让使用者有更多的自定义控件
 		this.moduleLoader = new ModuleLoader(
 			this,
 			this.moduleById,
@@ -400,8 +406,13 @@ export default class Graph {
 	getCache(): RollupCache {
 		// handle plugin cache eviction
 		for (const name in this.pluginCache) {
+			// 获取当前插件
 			const cache = this.pluginCache[name];
+			// 两步操作：
+			// 1. 遍历钩子函数，如果执行超过缓存过期次数了，删掉缓存的执行结果，结束，如果都没超过，也结束
+			// 2. 如果插件没有配置钩子函数，或者全部都过期了，那么删除这个插件的缓存
 			let allDeleted = true;
+			// 遍历插件的key，然后获取属性
 			for (const key of Object.keys(cache)) {
 				if (cache[key][0] >= this.cacheExpiry) delete cache[key];
 				else allDeleted = false;
