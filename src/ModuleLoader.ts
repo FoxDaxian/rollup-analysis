@@ -96,7 +96,7 @@ export class ModuleLoader {
 	private readonly hasModuleSideEffects: (id: string, external: boolean) => boolean;
 	private readonly indexedEntryModules: { index: number; module: Module }[] = [];
 	private latestLoadModulesPromise: Promise<any> = Promise.resolve();
-	private readonly manualChunkModules: Record<string, Module[]> = {};
+	private readonly manualChunkModules: Record<string, Module[]> = {}; // 用户定义的公共chunk的存储对象
 	private readonly modulesById: Map<string, Module | ExternalModule>;
 	private nextEntryModuleIndex = 0;
 	private readonly pluginDriver: PluginDriver;
@@ -196,7 +196,8 @@ export class ModuleLoader {
 			return entryModules;
 		});
 
-		// entryModules 和 newEntryModules 不一样哦
+		// newEntryModules是解析到的模块
+		// entryModules是包含index的模块对象({module, index})里的module
 		return this.awaitLoadModulesPromise(loadNewEntryModulesPromise).then(newEntryModules => ({
 			entryModules: this.indexedEntryModules.map(({ module }) => module), // 入口模块
 			manualChunkModulesByAlias: this.manualChunkModules, // chunk
@@ -206,20 +207,31 @@ export class ModuleLoader {
 
 	addManualChunks(manualChunks: Record<string, string[]>): Promise<void> {
 		const unresolvedManualChunks: { alias: string; id: string }[] = [];
+		// {
+		// 	lodash: ['lodash', ...],
+		// 	utils: ['swiper', ...]
+		// }
 		for (const alias of Object.keys(manualChunks)) {
 			const manualChunkIds = manualChunks[alias];
 			for (const id of manualChunkIds) {
+				// id为数组内的值，alias为key => {lodash: lodash, lodash: lodash}, {swiper: swiper, utils: utils}
 				unresolvedManualChunks.push({ id, alias });
 			}
 		}
+		// 这里没有等待，直接到了return
 		const loadNewManualChunkModulesPromise = Promise.all(
 			unresolvedManualChunks.map(({ id }) => this.loadEntryModule(id, false))
 		).then(manualChunkModules => {
 			for (let index = 0; index < manualChunkModules.length; index++) {
+				// 这一步把这些公共chunks都添加到 this.manualChunkModules 上
+				// 第一个参数为属于那个chunks，第二个参数为当前解析加载后的chunk(模块)
 				this.addModuleToManualChunk(unresolvedManualChunks[index].alias, manualChunkModules[index]);
 			}
+			// 未设置返回值
 		});
 
+		// loadNewManualChunkModulesPromise 还是pending状态
+		// 返回的还是上面这个loadNewManualChunkModulesPromise.(Promise.all)
 		return this.awaitLoadModulesPromise(loadNewManualChunkModulesPromise);
 	}
 
@@ -243,7 +255,7 @@ export class ModuleLoader {
 		if (module.manualChunkAlias !== null && module.manualChunkAlias !== alias) {
 			return error(errCannotAssignModuleToChunk(module.id, alias, module.manualChunkAlias));
 		}
-		// 这里设置rollup模块的chunk别名
+		// 这里设置rollup用户自定义公共chunk的别名
 		module.manualChunkAlias = alias;
 		// 将返回相同chunk 别名的 module添加到数组中，以便之后打包同一个chunk中
 		if (!this.manualChunkModules[alias]) {
@@ -252,6 +264,8 @@ export class ModuleLoader {
 		this.manualChunkModules[alias].push(module);
 	}
 
+	// 这块求一个有缘人吧，没看太明白，下满那个等式判断永远都是true的样子、、
+	// 看函数定义是等待promise的。。
 	private awaitLoadModulesPromise<T>(loadNewModulesPromise: Promise<T>): Promise<T> {
 		// 为了更新this.latestLoadModulesPromise的值
 		this.latestLoadModulesPromise = Promise.all([

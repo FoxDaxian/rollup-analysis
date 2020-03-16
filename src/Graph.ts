@@ -263,16 +263,16 @@ export default class Graph {
 			(manualChunks &&
 				typeof manualChunks === 'object' &&
 				this.moduleLoader.addManualChunks(manualChunks)) as Promise<void>
-		]).then(([{ entryModules, manualChunkModulesByAlias }]) => {
-			// entryModules为经过一系列转换后的rollup入口模块
+		]).then(([{ entryModules, manualChunkModulesByAlias }]) => { // 注意，参数为数组，是一个整体，都是第一个promise的返回，不包括manualChunks的返回！！！
+			// 参数的解析: entryModules是包含index的模块对象({module, index})里的module
 
+			// entryModules为经过一系列转换后的rollup入口模块
 			// 不能不指定入口
 			if (entryModules.length === 0) {
 				throw new Error('You must supply options.input to rollup');
 			}
+			// moduleById是 id => module 的存储， 是所有合法的入口模块
 			for (const module of this.moduleById.values()) {
-				// moduleById是 id => module 的存储， 是所有合法的入口模块
-
 				// 获取所有Module，根据类型添加到不同的容器中
 				if (module instanceof Module) {
 					this.modules.push(module);
@@ -289,7 +289,7 @@ export default class Graph {
 			// determine the topological execution order for the bundle
 			timeStart('analyse dependency graph', 2);
 
-			// entryModules 入口的rollup模块
+			// entryModules => module 入口的rollup模块
 			// 找到个依赖的正确的、有效的拓扑关系
 			// 获取所有入口，找到入口的依赖，删除无效的依赖，过滤出真正的入口启动rolluop模块
 			this.link(entryModules);
@@ -310,10 +310,10 @@ export default class Graph {
 				}
 			}
 			for (const module of entryModules) {
-				// 引入所有的导出，设定相关关系？
+				// 引入所有的导出，设定相关关系
 				module.includeAllExports();
 			}
-			// 给引入的模块做标记？
+			// 给引入的模块做标记
 			this.includeMarked(this.modules);
 
 			// 检查所有没使用的模块，进行提示警告，但没有删除
@@ -333,7 +333,7 @@ export default class Graph {
 			// inlineDynamicImports将动态导入的模块内敛到一个模块中，默认为false，不开启
 			// 如果都是取的默认值的话，进入判断
 			if (!this.preserveModules && !inlineDynamicImports) {
-				// TODO:给每个入口模块添加hash，暂时不知道有啥用，先继续看
+				// TODO:给每个入口模块添加hash，以备后续整合到一个chunk里？
 				assignChunkColouringHashes(entryModules, manualChunkModulesByAlias);
 			}
 
@@ -427,6 +427,7 @@ export default class Graph {
 	}
 
 	includeMarked(modules: Module[]) {
+		// 如果有treeshaking配置
 		if (this.treeshakingOptions) {
 			let treeshakingPass = 1;
 			do {
@@ -491,7 +492,7 @@ export default class Graph {
 		this.modules = orderedModules;
 
 		for (const module of this.modules) {
-			// TODO:这个是干啥的？ 这是link里面的，没看太明白，先跳过吧
+			// 表达式每个一个节点自己的实现
 			module.bindReferences();
 		}
 
