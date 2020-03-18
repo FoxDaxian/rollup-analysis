@@ -204,6 +204,7 @@ export class PluginDriver {
 		reduce: Reduce<R, T>,
 		replaceContext?: ReplaceContext
 	): Promise<T> {
+		// 初始值是options.intro(outro\banner\footer)这些
 		let promise = Promise.resolve(initialValue);
 		for (let i = 0; i < this.plugins.length; i++) {
 			promise = promise.then(value => {

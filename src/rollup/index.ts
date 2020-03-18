@@ -287,7 +287,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 		// GENERATE阶段
 		timeStart('GENERATE', 1);
 
-		// assetFileNames定义资源路径和文件名
+		// assetFileNames定义资源路径和文件名 生成的output主文件，其他都是被依赖文件
 		const assetFileNames = outputOptions.assetFileNames || 'assets/[name]-[hash][extname]';
 		// getAbsoluteEntryModulePaths: 如果是绝对路径，那么添加到数组，将这个数组返回
 		// commondir: 计算出这些目录的相同根目录，也就是交集
@@ -297,7 +297,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 		// 打包输出？如果对象含有type: placeholders，那么就是特殊的
 		const outputBundleWithPlaceholders: OutputBundleWithPlaceholders = Object.create(null);
 
-		// 给fileEmitter和assetFileNames上挂载资源
+		// 在fileEmitter上的私有output属性挂载资源，同步到 outputBundleWithPlaceholders 上，供后续使用
 		outputPluginDriver.setOutputBundle(outputBundleWithPlaceholders, assetFileNames);
 
 		let outputBundle;
@@ -306,7 +306,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 			// 执行renderStart钩子函数，该钩子主要用来获取和更改input和output配置
 			await outputPluginDriver.hookParallel('renderStart', [outputOptions, inputOptions]);
 
-			// 处理 footer banner intro outro这些
+			// 返回 footer banner intro outro钩子函数
 			const addons = await createAddons(outputOptions, outputPluginDriver);
 
 			for (const chunk of chunks) {
@@ -361,6 +361,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 			await outputPluginDriver.hookParallel('renderError', [error]);
 			throw error;
 		}
+		// generateBundle钩子函数
 		await outputPluginDriver.hookSeq('generateBundle', [outputOptions, outputBundle, isWrite]);
 		for (const key of Object.keys(outputBundle)) {
 			const file = outputBundle[key] as any;

@@ -116,7 +116,8 @@ export class NodeBase implements ExpressionNode {
 		this.keys = keys[esTreeNode.type] || getAndCreateKeys(esTreeNode);
 		this.parent = parent;
 		this.context = parent.context;
-		this.createScope(parentScope);
+		this.createScope(parentScope); // 设置当前语法树的作用域，类似原型链，可以根据这个一直查找
+		// 语法node解析工作
 		this.parseNode(esTreeNode);
 		this.initialise();
 		this.context.magicString.addSourcemapLocation(this.start);
@@ -264,7 +265,7 @@ export class NodeBase implements ExpressionNode {
 						child === null
 							? null
 							: new (this.context.nodeConstructors[child.type] ||
-									this.context.nodeConstructors.UnknownNode)(child, this, this.scope)
+									this.context.nodeConstructors.UnknownNode)(child, this, this.scope) // 处理各种ast类型
 					);
 				}
 			} else {

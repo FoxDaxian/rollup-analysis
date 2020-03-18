@@ -125,6 +125,7 @@ export const defaultAcornOptions: acorn.Options = {
 // 利用acorn解析，得到estree
 function tryParse(module: Module, Parser: typeof acorn.Parser, acornOptions: acorn.Options) {
 	try {
+		// module.code代表文件源代码
 		return Parser.parse(module.code, {
 			...defaultAcornOptions,
 			...acornOptions,
@@ -650,6 +651,7 @@ export default class Module {
 		timeStart('generate ast', 3);
 
 		// 获取esTreeAst
+		// 当前module
 		this.esTreeAst = ast || tryParse(this, this.graph.acornParser, this.graph.acornOptions);
 		// 传入注释和acorn生成的estree
 		// TODO： 感觉是通过这个方法格式化estree的
@@ -717,9 +719,10 @@ export default class Module {
 		this.scope = new ModuleScope(this.graph.scope, this.astContext);
 
 		// 新建了个Program的实例对象给this.ast
+		// 这里进行了语法数的解析
 		this.ast = new Program(
 			this.esTreeAst,
-			{ type: 'Module', context: this.astContext },
+			{ type: 'Module', context: this.astContext }, // astContext里包含了当前module和当前module的相关信息，使用bind绑定当前上下文
 			this.scope
 		);
 

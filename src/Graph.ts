@@ -382,6 +382,7 @@ export default class Graph {
 				}
 			}
 
+			// 这里要看下 import 和 export 部分
 			// 真的开始处理各个chunk了啊
 			for (const chunk of chunks) {
 				// 将依赖挂载到每个chunk上

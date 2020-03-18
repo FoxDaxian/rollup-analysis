@@ -396,6 +396,7 @@ export class ModuleLoader {
 				) {
 					if (cachedModule.transformFiles) {
 						for (const emittedFile of cachedModule.transformFiles)
+							// 提交文件内容，同时设置到referid上
 							this.pluginDriver.emitFile(emittedFile);
 					}
 					return cachedModule;
@@ -413,17 +414,20 @@ export class ModuleLoader {
 				// sourceDescription：{ code: source, ... }转化
 				// this.graph: 全局唯一的graph，代表模块图标
 				// 这行是让代码经过所有插件的transform操作
-				return transform(this.graph, sourceDescription, module);
+				// 默认返回 sourceDescription
+				return transform(this.graph, sourceDescription, module); // transform钩子函数
 			})
 			.then((source: TransformModuleJSON | ModuleJSON) => {
-				// 第三步操作，第三步操作有点不太懂细节了
-				// 所有的产出都会挂载到当前这个module上
+				// 到这一步，文件id(路径)已被解析成模块了
+
+				// transform的产出都会挂载到当前这个module上
 				module.setSource(source);
-				// 模块id与模块绑定
+				// 覆盖
 				this.modulesById.set(id, module);
 
 				// 处理模块的依赖们，将导出的模块也挂载到module上？
 				return this.fetchAllDependencies(module).then(() => {
+					// 多个导出
 					for (const name in module.exports) {
 						if (name !== 'default') {
 							module.exportsAll[name] = module.id;

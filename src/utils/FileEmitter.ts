@@ -220,20 +220,23 @@ export class FileEmitter {
 		assetFileNames: string
 	): void => {
 		this.output = {
+			// 打包出来的命名
 			assetFileNames,
+			// 新建的空对象 => Object.create(null)
 			bundle: outputBundle
 		};
-		// 遍历value
+		// 遍历rollup.rollup中设置的filesByReferenceId的values
 		for (const emittedFile of this.filesByReferenceId.values()) {
 			if (emittedFile.fileName) {
-				// 在bundle中保留文件名
+				// 文件名挂在到this.output上，作为key，值为： FILE_PLACEHOLDER
 				reserveFileNameInBundle(emittedFile.fileName, this.output.bundle, this.graph);
 			}
 		}
 		// 遍历set
 		for (const [referenceId, consumedFile] of this.filesByReferenceId.entries()) {
+			// 插件中定义了source的情况
 			if (consumedFile.type === 'asset' && consumedFile.source !== undefined) {
-				// 给output上绑定资源
+				// 给this.output上绑定资源
 				this.finalizeAsset(consumedFile, consumedFile.source, referenceId, this.output);
 			}
 		}
@@ -323,12 +326,15 @@ export class FileEmitter {
 		return this.assignReferenceId(consumedChunk, emittedChunk.id);
 	}
 
+	// 参数参考
+	// consumedFile, consumedFile.source, referenceId, this.output
 	private finalizeAsset(
 		consumedFile: ConsumedFile,
 		source: string | Buffer,
 		referenceId: string,
 		output: OutputSpecificFileData
 	): void {
+		// 找到filename，三种情况，资源本身上的，设置的source上的，再生成一个
 		const fileName =
 			consumedFile.fileName ||
 			this.findExistingAssetFileNameWithSource(output.bundle, source) ||
@@ -337,6 +343,7 @@ export class FileEmitter {
 		// We must not modify the original assets to avoid interaction between outputs
 		const assetWithFileName = { ...consumedFile, source, fileName };
 		this.filesByReferenceId.set(referenceId, assetWithFileName);
+		// 再设置到this.output上
 		const graph = this.graph;
 		output.bundle[fileName] = {
 			fileName,
