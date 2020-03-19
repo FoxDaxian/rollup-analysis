@@ -260,6 +260,7 @@ export class NodeBase implements ExpressionNode {
 				(this as GenericEsTreeNode)[key] = value;
 			} else if (Array.isArray(value)) {
 				(this as GenericEsTreeNode)[key] = [];
+				// this.context.nodeConstructors 针对不同的语法书类型，进行不同的操作，比如挂载依赖等等
 				for (const child of value) {
 					(this as GenericEsTreeNode)[key].push(
 						child === null

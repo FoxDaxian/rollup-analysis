@@ -318,18 +318,20 @@ export default class Chunk {
 
 	generateInternalExports(options: OutputOptions) {
 		if (this.facadeModule !== null) return;
+
 		const mangle = options.format === 'system' || options.format === 'es' || options.compact;
 		let i = 0,
 			safeExportName: string;
 		this.exportNames = Object.create(null);
 		this.sortedExportNames = null;
 		if (mangle) {
+			// 将导出内容设置到exportNames上
 			for (const variable of this.exports) {
 				const suggestedName = variable.name[0];
 				if (!this.exportNames[suggestedName]) {
 					this.exportNames[suggestedName] = variable;
 				} else {
-					// 避免重复和关键字
+					// 如果有的话，生成安全名，避免重复和关键字
 					do {
 						safeExportName = toBase64(++i);
 						// skip past leading number identifiers
@@ -571,6 +573,7 @@ export default class Chunk {
 		}
 
 		// for static and dynamic entry points, inline the execution list to avoid loading latency
+		// 对于静态和动态入口，扁平化依赖，以避免加载延迟
 		if (
 			options.hoistTransitiveImports !== false &&
 			!this.graph.preserveModules &&
@@ -582,11 +585,12 @@ export default class Chunk {
 		}
 
 		// prune empty dependency chunks, inlining their side-effect dependencies
+		// 空的依赖模块，也要将他们的副作用模块添加到dependencies
 		for (let i = 0; i < this.dependencies.length; i++) {
 			const dep = this.dependencies[i];
 			if (dep instanceof Chunk && dep.isEmpty) {
 				// 过滤空的chunk，并且提取空chunk中的依赖
-				// 为什么要空的chunk还要提出依赖呢？因为既然依赖这个chunk，肯定需要他暴露出来的东西啦
+				// 为什么要空的chunk还要提出依赖呢？因为既然依赖这个chunk，肯定需要他暴露出来的东西啦，不需要深度查找
 				this.dependencies.splice(i--, 1);
 				this.inlineChunkDependencies(dep, false);
 			}
@@ -1132,6 +1136,7 @@ export default class Chunk {
 	private prepareDynamicImports() {
 		for (const module of this.orderedModules) {
 			for (const { node, resolution } of module.dynamicImports) {
+				// 被引用过过了，继续下次循环
 				if (!node.included) continue;
 				if (resolution instanceof Module) {
 					if (resolution.chunk === this) {

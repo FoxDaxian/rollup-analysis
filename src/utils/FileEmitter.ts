@@ -226,13 +226,14 @@ export class FileEmitter {
 			bundle: outputBundle
 		};
 		// 遍历rollup.rollup中设置的filesByReferenceId的values
+		// 处理文件
 		for (const emittedFile of this.filesByReferenceId.values()) {
 			if (emittedFile.fileName) {
 				// 文件名挂在到this.output上，作为key，值为： FILE_PLACEHOLDER
 				reserveFileNameInBundle(emittedFile.fileName, this.output.bundle, this.graph);
 			}
 		}
-		// 遍历set
+		// 遍历set 不处理文件只处理资源
 		for (const [referenceId, consumedFile] of this.filesByReferenceId.entries()) {
 			// 插件中定义了source的情况
 			if (consumedFile.type === 'asset' && consumedFile.source !== undefined) {

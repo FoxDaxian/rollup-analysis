@@ -151,6 +151,7 @@ export class ModuleLoader {
 			// 再次声明，rollup以文件路径为id哦！！！这个很重要
 			// 返回了Promise[]以供promise.all使用
 			unresolvedEntryModules.map(({ fileName, id, name }) =>
+				// 主要是这一步进行文件解析和依赖相关的处理
 				this.loadEntryModule(id, true).then(module => {
 					// 上面的module参数是id经过一系列处理后得到的rollup模块
 					// 在进行chunk的处理
@@ -287,6 +288,7 @@ export class ModuleLoader {
 
 	// 获取所有的依赖模块
 	private fetchAllDependencies(module: Module): Promise<unknown> {
+		// module.sources 依赖哪些模块
 		return Promise.all([
 			...(Array.from(module.sources).map(async source =>
 				this.fetchResolvedDependency(
@@ -335,7 +337,8 @@ export class ModuleLoader {
 			return Promise.resolve(existingModule);
 		}
 
-		// 是时候将入口路径转换成rollup的模块了！！
+		// 将入口路径转换成rollup的模块
+		// 不过目前只有基本信息，没有其他内容
 		const module: Module = new Module(
 			this.graph,
 			id,
@@ -343,10 +346,11 @@ export class ModuleLoader {
 			syntheticNamedExports,
 			isEntry
 		);
-		// 缓存，以备优化
+		// 缓存到modulesById，以备优化
 		this.modulesById.set(id, module);
 		// 为每一个入库模块启动监听
 		this.graph.watchFiles[id] = true;
+		// manualChunks方法
 		// this.getManualChunk为用户定义的公共包提取规则，如果是函数才会进入这条判断
 		// 大概逻辑为：如果当前入口用户定义了提取公共chunk规则的话，将该公共模块进行添加缓存
 		const manualChunkAlias = this.getManualChunk(id);
@@ -357,10 +361,12 @@ export class ModuleLoader {
 		// }
 		if (typeof manualChunkAlias === 'string') {
 			// 将用户定义的公共模块名进行添加操作
+			// manualChunkAlias设置到module上
 			this.addModuleToManualChunk(manualChunkAlias, module);
 		}
 
 		timeStart('load modules', 3);
+		// 获取文件内容
 		return Promise.resolve(this.pluginDriver.hookFirst('load', [id]))
 			.catch((err: Error) => {
 				timeEnd('load modules', 3);
@@ -371,7 +377,7 @@ export class ModuleLoader {
 				throw err;
 			})
 			.then(source => {
-				// 第一步操作
+				// 格式化文件内容为统一格式
 				timeEnd('load modules', 3);
 				// 格式化为{ code: source }的样子
 				// 参考 https://github.com/rollup/plugins/tree/e7a9e4a516d398cbbd1fa2b605610517d9161525/packages/wasm 这个插件
@@ -388,7 +394,6 @@ export class ModuleLoader {
 				// 好多都是这种思想，开发语言有中间机器码之说，babel有ast之说，mvvm框架有vdom之说，rollup有专用的模块之说。。。。
 				const cachedModule = this.graph.cachedModules.get(id);
 				// 如果和当前构建的模块一直，那么进行emitFile操作，然后返回缓存模块，提升性能
-				//
 				if (
 					cachedModule &&
 					!cachedModule.customTransformCache &&
@@ -401,6 +406,8 @@ export class ModuleLoader {
 					}
 					return cachedModule;
 				}
+
+				// 没有缓存的逻辑
 
 				// 没有缓存的时候的逻辑，可通过该逻辑得到上面缓存中的一些字段是怎么来的
 				// 给当前模块添加一些标志
@@ -458,6 +465,7 @@ export class ModuleLoader {
 	): Promise<Module | ExternalModule> {
 		// 区分处理外部依赖模块和非外部依赖模块
 		if (resolvedId.external) {
+			// 有缓存的话，直接使用
 			if (!this.modulesById.has(resolvedId.id)) {
 				this.modulesById.set(
 					resolvedId.id,
@@ -524,6 +532,7 @@ export class ModuleLoader {
 					? resolveIdResult.id
 					: resolveIdResult;
 
+			// 解析到文件路径了，开始获取这个模块
 			if (typeof id === 'string') {
 				// 返回经过一大堆处理后的rollup模块
 				return this.fetchModule(id, undefined as any, true, false, isEntry);

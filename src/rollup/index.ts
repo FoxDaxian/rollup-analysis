@@ -294,7 +294,8 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 		// inputBase: 计算出这些目录的相同根目录，也就是交集
 		const inputBase = commondir(getAbsoluteEntryModulePaths(chunks));
 
-		// 打包输出？如果对象含有type: placeholders，那么就是特殊的
+		// 打包输出。如果对象含有type: placeholders，那么就是默认的
+		// outputBundleWithPlaceholders是全部chunks和assets的集合
 		const outputBundleWithPlaceholders: OutputBundleWithPlaceholders = Object.create(null);
 
 		// 在fileEmitter上的私有output属性挂载资源，同步到 outputBundleWithPlaceholders 上，供后续使用
@@ -330,6 +331,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 				optimizeChunks(chunks, outputOptions, inputOptions.chunkGroupingSize!, inputBase);
 				optimized = true;
 			}
+			// 生成chunks的id，也就是打包出来的文件名
 			assignChunkIds(
 				chunks,
 				inputOptions,
@@ -339,14 +341,17 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 				outputBundleWithPlaceholders,
 				outputPluginDriver
 			);
+			// 设置好chunks的对象
 			outputBundle = assignChunksToBundle(chunks, outputBundleWithPlaceholders);
 
+			// 语法树render操作
 			await Promise.all(
 				chunks.map(chunk => {
 					const outputChunk = outputBundleWithPlaceholders[chunk.id!] as OutputChunk;
 					return chunk
 						.render(outputOptions, addons, outputChunk, outputPluginDriver)
 						.then(rendered => {
+							// 引用类型，outputBundleWithPlaceholders上的也变化了，所以outputBundle也变化了，最后返回outputBundle
 							outputChunk.code = rendered.code;
 							outputChunk.map = rendered.map;
 

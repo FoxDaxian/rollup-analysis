@@ -126,6 +126,7 @@ export default function transform(
 			[curSource, id], // source.code 和 模块id
 			transformReducer,
 			(pluginContext, plugin) => {
+				// 这一大堆是插件利用的，通过this.xxx调用
 				curPlugin = plugin;
 				if (curPlugin.cacheKey) customTransformCache = true;
 				else trackedPluginCache = getTrackedPluginCache(pluginContext.cache);
