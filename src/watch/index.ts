@@ -1,4 +1,4 @@
-import { WatchOptions } from 'chokidar';
+import { WatchOptions } from 'chokidar'; // 只是获取这个类型
 import { EventEmitter } from 'events';
 import path from 'path';
 import createFilter from 'rollup-pluginutils/src/createFilter';
@@ -28,11 +28,13 @@ export class Watcher {
 	private tasks: Task[];
 
 	constructor(configs: GenericConfigObject[] | GenericConfigObject) {
+		// 没使用类名，直接用的类体，来实例化的，看了半天。。
 		this.emitter = new (class extends EventEmitter {
 			close: () => void;
 			constructor(close: () => void) {
 				super();
 				this.close = close;
+				// 不警告
 				// Allows more than 10 bundles to be watched without
 				// showing the `MaxListenersExceededWarning` to the user.
 				this.setMaxListeners(Infinity);
@@ -72,9 +74,11 @@ export class Watcher {
 		this.buildTimeout = setTimeout(() => {
 			this.buildTimeout = null;
 			for (const id of this.invalidatedIds) {
+				// 触发rollup.rollup中监听的事件
 				this.emit('change', id);
 			}
 			this.invalidatedIds.clear();
+			// 触发rollup.rollup中监听的事件
 			this.emit('restart');
 			this.run();
 		}, DELAY);
@@ -83,12 +87,14 @@ export class Watcher {
 	private run() {
 		this.running = true;
 
+		// 这类是触发脚手架监听的event事件，通过传递不同的code触发不同的事件
 		this.emit('event', {
 			code: 'START'
 		});
 
 		let taskPromise = Promise.resolve();
 		for (const task of this.tasks) taskPromise = taskPromise.then(() => task.run());
+
 		return taskPromise
 			.then(() => {
 				this.running = false;
@@ -113,6 +119,7 @@ export class Watcher {
 	}
 }
 
+// Task类，执行任务的
 export class Task {
 	cache: RollupCache = { modules: [] };
 	watchFiles: string[] = [];
@@ -129,6 +136,7 @@ export class Task {
 	private watcher: Watcher;
 
 	constructor(watcher: Watcher, config: GenericConfigObject) {
+		// 获取Watch实例
 		this.watcher = watcher;
 
 		this.closed = false;
@@ -148,7 +156,9 @@ export class Task {
 		const watchOptions: WatcherOptions = inputOptions.watch || {};
 		if ('useChokidar' in watchOptions)
 			(watchOptions as any).chokidar = (watchOptions as any).useChokidar;
+
 		let chokidarOptions = 'chokidar' in watchOptions ? watchOptions.chokidar : !!chokidar;
+
 		if (chokidarOptions) {
 			chokidarOptions = {
 				...(chokidarOptions === true ? {} : chokidarOptions),
@@ -185,6 +195,7 @@ export class Task {
 				module.originalCode = null as any;
 			}
 		}
+		// 再调用watcher上的invalidate
 		this.watcher.invalidate(id);
 	}
 

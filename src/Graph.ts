@@ -170,7 +170,7 @@ export default class Graph {
 		);
 
 		// 如果传递了设置了watch，那么对改变进行监听
-		// watcher好像是rollup.watcher的时候才会进入
+		// watcher是emitter对象，订阅了change和restart事件，当watcher那边触发的时候，重新绑定钩子函数
 		if (watcher) {
 			const handleChange = (id: string) => this.pluginDriver.hookSeqSync('watchChange', [id]);
 			watcher.on('change', handleChange);

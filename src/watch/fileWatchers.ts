@@ -7,6 +7,7 @@ const opts = { encoding: 'utf-8', persistent: true };
 
 const watchers = new Map<string, Map<string, FileWatcher>>();
 
+// 添加任务、删除任务
 export function addTask(
 	id: string,
 	task: Task,
@@ -14,6 +15,7 @@ export function addTask(
 	chokidarOptionsHash: string,
 	isTransformDependency: boolean
 ) {
+	// 如果没有记录的话进行初始化
 	if (!watchers.has(chokidarOptionsHash)) watchers.set(chokidarOptionsHash, new Map());
 	const group = watchers.get(chokidarOptionsHash)!;
 
@@ -31,6 +33,7 @@ export function deleteTask(id: string, target: Task, chokidarOptionsHash: string
 	if (watcher) watcher.deleteTask(target, group);
 }
 
+// 文件监听类
 export default class FileWatcher {
 	fsWatcher?: FSWatcher | fs.FSWatcher;
 
@@ -75,6 +78,7 @@ export default class FileWatcher {
 					}
 					throw err;
 				}
+				// 重新触发构建
 				// debounce
 				if (+stats.mtime - modifiedTime > 15) this.trigger(id);
 			}

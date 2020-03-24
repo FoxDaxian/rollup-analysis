@@ -59,6 +59,7 @@ export default function watch(
 		});
 	}
 
+	// 脚手架相关
 	function start(configs: RollupWatchOptions[]) {
 		watcher = rollup.watch(configs as any);
 
