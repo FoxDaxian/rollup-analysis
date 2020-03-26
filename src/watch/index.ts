@@ -33,6 +33,7 @@ export class Watcher {
 			close: () => void;
 			constructor(close: () => void) {
 				super();
+				// 供用户关闭使
 				this.close = close;
 				// 不警告
 				// Allows more than 10 bundles to be watched without
@@ -64,11 +65,13 @@ export class Watcher {
 		if (id) {
 			this.invalidatedIds.add(id);
 		}
+		// 防止刷刷刷
 		if (this.running) {
 			this.rerun = true;
 			return;
 		}
 
+		// clear pre
 		if (this.buildTimeout) clearTimeout(this.buildTimeout);
 
 		this.buildTimeout = setTimeout(() => {
@@ -80,6 +83,7 @@ export class Watcher {
 			this.invalidatedIds.clear();
 			// 触发rollup.rollup中监听的事件
 			this.emit('restart');
+			// 又走了一遍构建
 			this.run();
 		}, DELAY);
 	}
@@ -87,7 +91,7 @@ export class Watcher {
 	private run() {
 		this.running = true;
 
-		// 这类是触发脚手架监听的event事件，通过传递不同的code触发不同的事件
+		// 当emit 'event' 事件的时候，统一是传递给cli使用，通过code区别不同的执行环节，相当于钩子函数，我们也可以使用增加监听event事件来做我们想做的事
 		this.emit('event', {
 			code: 'START'
 		});
@@ -97,6 +101,7 @@ export class Watcher {
 
 		return taskPromise
 			.then(() => {
+				// 执行之后就置为false了，否则下次不会顺利执行，也保证了不会同时触发多次task
 				this.running = false;
 
 				this.emit('event', {
@@ -248,10 +253,14 @@ export class Task {
 	}
 
 	private updateWatchedFiles(result: RollupBuild) {
+		// 上一次的监听set
 		const previouslyWatched = this.watched;
+		// 新建监听set
 		this.watched = new Set();
+		// 构建的时候获取的监听文件，赋给watchFiles
 		this.watchFiles = result.watchFiles;
 		this.cache = result.cache;
+		// 将监听的文件添加到监听set中
 		for (const id of this.watchFiles) {
 			this.watchFile(id);
 		}
@@ -260,6 +269,7 @@ export class Task {
 				this.watchFile(depId, true);
 			}
 		}
+		// 上次监听的文件，这次没有的话，删除任务
 		for (const id of previouslyWatched) {
 			if (!this.watched.has(id)) deleteTask(id, this, this.chokidarOptionsHash);
 		}
@@ -273,6 +283,7 @@ export class Task {
 			throw new Error('Cannot import the generated bundle');
 		}
 
+		// 增加任务
 		// this is necessary to ensure that any 'renamed' files
 		// continue to be watched following an error
 		addTask(id, this, this.chokidarOptions, this.chokidarOptionsHash, isTransformDependency);

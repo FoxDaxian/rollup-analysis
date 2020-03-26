@@ -48,6 +48,7 @@ export default class FileWatcher {
 
 		let modifiedTime: number;
 
+		// 文件状态
 		try {
 			const stats = fs.statSync(id);
 			modifiedTime = +stats.mtime;
@@ -60,8 +61,10 @@ export default class FileWatcher {
 			throw err;
 		}
 
+		// 处理文件不同的更新状态
 		const handleWatchEvent = (event: string) => {
 			if (event === 'rename' || event === 'unlink') {
+				// 重命名 link时触发
 				this.close();
 				group.delete(id);
 				this.trigger(id);
@@ -71,6 +74,7 @@ export default class FileWatcher {
 				try {
 					stats = fs.statSync(id);
 				} catch (err) {
+					// 文件找不到的时候
 					if (err.code === 'ENOENT') {
 						modifiedTime = -1;
 						this.trigger(id);
@@ -78,12 +82,13 @@ export default class FileWatcher {
 					}
 					throw err;
 				}
-				// 重新触发构建
+				// 重新触发构建，且避免多次重复操作
 				// debounce
 				if (+stats.mtime - modifiedTime > 15) this.trigger(id);
 			}
 		};
 
+		// 通过handleWatchEvent处理所有文件更新状态
 		this.fsWatcher = chokidarOptions
 			? chokidar.watch(id, chokidarOptions).on('all', handleWatchEvent)
 			: fs.watch(id, opts, handleWatchEvent);
@@ -97,6 +102,7 @@ export default class FileWatcher {
 	}
 
 	close() {
+		// 关闭文件监听
 		if (this.fsWatcher) this.fsWatcher.close();
 	}
 
