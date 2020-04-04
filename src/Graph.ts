@@ -89,8 +89,7 @@ export default class Graph {
 	constructor(options: InputOptions, watcher?: RollupWatcher) {
 		// 警告函数
 		this.onwarn = (options.onwarn as WarningHandler) || makeOnwarn();
-		// (依赖)路径追踪
-		// 路径追踪器，追踪是否有副作用
+		// ast node的栈，保存内容的？
 		this.deoptimizationTracker = new PathTracker();
 
 		// 创建map
@@ -227,7 +226,7 @@ export default class Graph {
 		// 模块(文件)解析加载，内部调用的resolveID和load等钩子，让使用者有更多的自定义控件
 		this.moduleLoader = new ModuleLoader(
 			this,
-			this.moduleById,
+			this.moduleById, // 这里是moduleById，到类中就变成了modulesById
 			this.pluginDriver,
 			options.external!,
 			(typeof options.manualChunks === 'function' && options.manualChunks) as GetManualChunk | null,
@@ -258,12 +257,23 @@ export default class Graph {
 			// 	manualChunkModulesByAlias: this.manualChunkModules,
 			// 	newEntryModules
 			// }
+			// addEntryModules中底层会调用fetchModule，会挂载各种相关数据，并且通过acorn解析ast tree
+			// ！！！解析后的ast tree 会从program开始，依次循环遍历，不同的类型实例化出不同的节点，在通过initial方法进行相关ast node type的关键数据挂载，这样就是一个标准的具有文件上下文信息的一个module！！！
 			this.moduleLoader.addEntryModules(normalizeEntryModules(entryModules), true),
 			// TODO:下面的将chunk自定义转换成函数，并没有在then中读取回调，这块晚点再确认一下
 			(manualChunks &&
 				typeof manualChunks === 'object' &&
 				this.moduleLoader.addManualChunks(manualChunks)) as Promise<void>
+				// 注意，下面的参数只和Promise.all的第一个参数相关，和第二个参数无关
 		]).then(([{ entryModules, manualChunkModulesByAlias }]) => { // 注意，参数为数组，是一个整体，都是第一个promise的返回，不包括manualChunks的返回！！！
+
+			// manualChunkModulesByAlias => manualChunkModules
+			// 里面是这种样子的:
+			// {
+			// 	[alias key]: module[]
+			// }
+
+			// entryModules 是入口模块，this.moduleById 包含所有模块了，比如externalModules
 			// 参数的解析: entryModules是包含index的模块对象({module, index})里的module
 
 			// entryModules为经过一系列转换后的rollup入口模块
@@ -309,12 +319,16 @@ export default class Graph {
 					);
 				}
 			}
+			// 处理export语句的，暂时不看
 			for (const module of entryModules) {
-				// 引入所有的导出，设定相关关系
 				module.includeAllExports();
 			}
-			// 给引入的模块做标记
+
+			// 获取完module后，给引入的模块做标记
+			// TODO: 找个例子实验一波
 			this.includeMarked(this.modules);
+
+			// 被include的都已经做好标记了，接下来生成chunks
 
 			// 检查所有没使用的模块，进行提示警告，但没有删除
 			// check for unused external imports
@@ -333,7 +347,8 @@ export default class Graph {
 			// inlineDynamicImports将动态导入的模块内敛到一个模块中，默认为false，不开启
 			// 如果都是取的默认值的话，进入判断
 			if (!this.preserveModules && !inlineDynamicImports) {
-				// TODO:给每个入口模块添加hash，以备后续整合到一个chunk里？
+				// 获取到了manualchunkmodule，即用户指定的模块组，然后通过生成唯一的hash值，并且迭代module，获取其依赖，给依赖们都添加上和这个唯一的hash，之后可以通过这个唯一的标志，将所有的相关模块都打到一个包里。
+				// 那么，如果重复了呢？这块猜测是做了去重。还需要看后面的代码确认
 				assignChunkColouringHashes(entryModules, manualChunkModulesByAlias);
 			}
 
@@ -342,6 +357,7 @@ export default class Graph {
 			//       either as a namespace import reexported or top-level export *)
 			//       should be made to be its own entry point module before chunking
 
+			// 到这里了，明天继续分析
 			let chunks: Chunk[] = [];
 
 			// 为每个模块都创建chunk
@@ -365,8 +381,10 @@ export default class Graph {
 					const curChunk = chunkModules[entryPointsHashStr];
 					// 有的话，添加module，没有的话创建并添加，相同的hash值会添加到一起
 					if (curChunk) {
+						// 同一类型的添加到一起
 						curChunk.push(module);
 					} else {
+						// 数组
 						chunkModules[entryPointsHashStr] = [module];
 					}
 				}
@@ -428,13 +446,15 @@ export default class Graph {
 	}
 
 	includeMarked(modules: Module[]) {
-		// 如果有treeshaking配置
+		// 如果有treeshaking不为空
 		if (this.treeshakingOptions) {
+			// 第一个tree shaking
 			let treeshakingPass = 1;
 			do {
 				timeStart(`treeshaking pass ${treeshakingPass}`, 3);
 				this.needsTreeshakingPass = false;
 				for (const module of modules) {
+					// 标记是需要的，不能shaking
 					if (module.isExecuted) module.include();
 				}
 				timeEnd(`treeshaking pass ${treeshakingPass++}`, 3);
@@ -471,9 +491,9 @@ export default class Graph {
 	}
 
 	private link(entryModules: Module[]) {
-		// 上个方法内获取到的modules
+		// 遍历入口模块
 		for (const module of this.modules) {
-			// 找到所有的依赖
+			// 将依赖链接(挂载)到当前module上
 			module.linkDependencies();
 		}
 		// 入口模块依赖解析

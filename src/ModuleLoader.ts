@@ -120,6 +120,8 @@ export class ModuleLoader {
 		pureExternalModules: PureModulesOption
 	) {
 		this.graph = graph;
+		// modulesById是个map(对象)结构，上面挂载了所有的模块，第一，避免重复，第二，之后的流程中挂载到当前处理的module上
+		// 等等，还未发现其他
 		this.modulesById = modulesById;
 		this.pluginDriver = pluginDriver;
 		// 匹配外部资源
@@ -201,7 +203,9 @@ export class ModuleLoader {
 		// entryModules是包含index的模块对象({module, index})里的module
 		return this.awaitLoadModulesPromise(loadNewEntryModulesPromise).then(newEntryModules => ({
 			entryModules: this.indexedEntryModules.map(({ module }) => module), // 入口模块
-			manualChunkModulesByAlias: this.manualChunkModules, // chunk
+			// chunkModule们
+			// 利用graph的第二个参数，虽然返回为undefined，但是promise.all得等他们两个完成，所以这时候当前module对应的moduleLoader上就有下面的 this.manualChunkModules 了
+			manualChunkModulesByAlias: this.manualChunkModules,
 			newEntryModules // module详细信息
 		}));
 	}
@@ -213,6 +217,7 @@ export class ModuleLoader {
 		// 	utils: ['swiper', ...]
 		// }
 		for (const alias of Object.keys(manualChunks)) {
+			// 数组
 			const manualChunkIds = manualChunks[alias];
 			for (const id of manualChunkIds) {
 				// id为数组内的值，alias为key => {lodash: lodash, lodash: lodash}, {swiper: swiper, utils: utils}
@@ -225,7 +230,7 @@ export class ModuleLoader {
 		).then(manualChunkModules => {
 			for (let index = 0; index < manualChunkModules.length; index++) {
 				// 这一步把这些公共chunks都添加到 this.manualChunkModules 上
-				// 第一个参数为属于那个chunks，第二个参数为当前解析加载后的chunk(模块)
+				// 第一个参数为属于那个alias，第二个参数为当前解析加载后的chunk(模块)
 				this.addModuleToManualChunk(unresolvedManualChunks[index].alias, manualChunkModules[index]);
 			}
 			// 未设置返回值
@@ -250,9 +255,13 @@ export class ModuleLoader {
 		);
 	}
 
+	// alias可能是重复的，module为alias对应的那些包，比如下面这种格式:
+	// manualChunks: {
+	// 	lodash: ['lodash', 'jquery']
+	// }
 	private addModuleToManualChunk(alias: string, module: Module) {
 		// Module类，初始化为实例的时候，manualChunkAlias默认为null
-		// 如果不为null，那么就重复赋值了，报错吧
+		// 如果模块里的属性和alias对不上，报错
 		if (module.manualChunkAlias !== null && module.manualChunkAlias !== alias) {
 			return error(errCannotAssignModuleToChunk(module.id, alias, module.manualChunkAlias));
 		}
@@ -265,8 +274,9 @@ export class ModuleLoader {
 		this.manualChunkModules[alias].push(module);
 	}
 
-	// 这块求一个有缘人吧，没看太明白，下满那个等式判断永远都是true的样子、、
-	// 看函数定义是等待promise的。。
+	// 如果latestLoadModulesPromise 和 startingPromise不相等，那么会一直递归调用getCombinedPromise，直至相等
+	// 最后返回参数：loadNewModulesPromise
+	// 好像是为了避免promise的不是同一个模块的样子
 	private awaitLoadModulesPromise<T>(loadNewModulesPromise: Promise<T>): Promise<T> {
 		// 为了更新this.latestLoadModulesPromise的值
 		this.latestLoadModulesPromise = Promise.all([
@@ -323,6 +333,7 @@ export class ModuleLoader {
 	}
 
 	// 传入的参数示例：id, undefined, true, false, isEntry(true)
+	// 在进行模块依赖分析的时候，该方法会递归使用
 	private fetchModule(
 		id: string,
 		importer: string,
@@ -428,11 +439,13 @@ export class ModuleLoader {
 				// 到这一步，文件id(路径)已被解析成模块了
 
 				// transform的产出都会挂载到当前这个module上
+				// parseNode很关键，会对各种类型的 node type 进行实例化操作，以便日后使用
+				// 并且对import export 等依赖 做了分析，并添加到模块的source上
 				module.setSource(source);
-				// 覆盖
+				// 初始化或覆盖
 				this.modulesById.set(id, module);
 
-				// 处理模块的依赖们，将导出的模块也挂载到module上？
+				// 处理export的数据
 				return this.fetchAllDependencies(module).then(() => {
 					// 多个导出
 					for (const name in module.exports) {
@@ -467,6 +480,7 @@ export class ModuleLoader {
 		if (resolvedId.external) {
 			// 有缓存的话，直接使用
 			if (!this.modulesById.has(resolvedId.id)) {
+				// 设置外部模块，这就是和entryModule的主要区别，entryModule就是主模块，或者说是入口模块
 				this.modulesById.set(
 					resolvedId.id,
 					// 外部模块

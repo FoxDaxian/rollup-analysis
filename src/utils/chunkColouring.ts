@@ -27,8 +27,8 @@ export function assignChunkColouringHashes(
 		const manualChunkAlias = entry.manualChunkAlias;
 		const modulesToHandle = new Set([entry]);
 		for (const module of modulesToHandle) {
+			// 往module的依赖上添加相同的manual chunk alias
 			if (manualChunkAlias) {
-				// 这不多余吗？
 				module.manualChunkAlias = manualChunkAlias;
 				// 添加hash
 				module.entryPointsHash = colour;
@@ -44,6 +44,7 @@ export function assignChunkColouringHashes(
 				// 重置hash
 				Uint8ArrayXor(module.entryPointsHash, colour);
 			}
+			// 这里对应上面的这个操作：module.manualChunkAlias = manualChunkAlias;
 			for (const dependency of module.dependencies) {
 				// 将非外部依赖模块push到循环中，继续分析，可以不用递归了
 				if (!(dependency instanceof ExternalModule || dependency.manualChunkAlias)) {
@@ -70,17 +71,20 @@ export function assignChunkColouringHashes(
 		return true;
 	}
 
+	// TODO: 去测试里的代码中看看
 	// 给每个入口模块都加上hash
 	if (manualChunkModules) {
 		for (const chunkName of Object.keys(manualChunkModules)) {
 			const entryHash = randomUint8Array(10);
 
+			// entry对应alias对应的数组中的所有module
 			for (const entry of manualChunkModules[chunkName]) {
 				addColourToModuleDependencies(entry, entryHash, null);
 			}
 		}
 	}
 
+	// 没有的话，默认随机生成
 	for (const entry of entryModules) {
 		if (!entry.manualChunkAlias) {
 			const entryHash = randomUint8Array(10);

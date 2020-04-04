@@ -97,7 +97,7 @@ export interface ExpressionNode extends ExpressionEntity, Node {}
 export class NodeBase implements ExpressionNode {
 	context: AstContext;
 	end!: number;
-	included = false;
+	included = false; // 默认没有被引入，可以shaking
 	keys: string[];
 	parent: Node | { context: AstContext; type: string };
 	scope!: ChildScope;
@@ -111,15 +111,25 @@ export class NodeBase implements ExpressionNode {
 	) {
 		// 参考这个网站转义的结果：https://astexplorer.net/
 		// type为当前整个estree的类型
-		// keys是方法，别看岔了！！！
+		// keys是对象，别看岔了！！！
 		// getAndCreateKeys用来递归esTreeNode对象上的所有节点的type，并赋值给keys
+		// keys = {
+		// 	Literal: [],
+		// 	Program: ['body']
+		// }
 		this.keys = keys[esTreeNode.type] || getAndCreateKeys(esTreeNode);
 		this.parent = parent;
 		this.context = parent.context;
 		this.createScope(parentScope); // 设置当前语法树的作用域，类似原型链，可以根据这个一直查找
-		// 语法node解析工作
+		// 语法node解析工作，判断各个类型的value，然后再new Programe
+		// 将ast的所有属性解析(不只获取，还进行了各类型的new nodeType操作)，然挂载到实例上(new Program)上
+		// 并且，之后每一个 ast node type 初始的include都是false
+		// 基础解析方法 parseNode，在每次new 的时候都会调用  => 递归
 		this.parseNode(esTreeNode);
+		// 被子类重写了
 		this.initialise();
+		// 这时候，当前实例(this)上就有了ast tree的start和end属性
+		// 添加字符索引到source map？
 		this.context.magicString.addSourcemapLocation(this.start);
 		this.context.magicString.addSourcemapLocation(this.end);
 	}
@@ -130,13 +140,13 @@ export class NodeBase implements ExpressionNode {
 	 */
 	bind() {
 		for (const key of this.keys) {
-			// 获取每一个estree块，也就是acron解析出来的块
+			// 获取ast上的每一个属性
 			const value = (this as GenericEsTreeNode)[key];
-			// 不能为null或者注解？
+			// 不能为null或者类型注解
 			if (value === null || key === 'annotations') continue;
 			if (Array.isArray(value)) {
 				for (const child of value) {
-					// TODO:这个bind是acorn产出的ast中自带的？还是什么？没看明白
+					// 各ast node type上实现的bind方法
 					if (child !== null) child.bind();
 				}
 			} else {
@@ -205,6 +215,7 @@ export class NodeBase implements ExpressionNode {
 
 	include(context: InclusionContext, includeChildrenRecursively: IncludeChildren) {
 		this.included = true;
+		// 将内容全都设置为include
 		for (const key of this.keys) {
 			const value = (this as GenericEsTreeNode)[key];
 			if (value === null || key === 'annotations') continue;
@@ -252,16 +263,24 @@ export class NodeBase implements ExpressionNode {
 	}
 
 	parseNode(esTreeNode: GenericEsTreeNode) {
+		// 就是遍历，然后new nodeType，然后挂载到实例上
 		for (const key of Object.keys(esTreeNode)) {
 			// That way, we can override this function to add custom initialisation and then call super.parseNode
+			// this 指向 Program构造类，通过new创建的
+			// 如果program上有的话，那么跳过
 			if (this.hasOwnProperty(key)) continue;
+			// ast tree上的每一个属性
 			const value = esTreeNode[key];
+			// 不等于对象或者null或者key是annotations
+			// annotations是type
 			if (typeof value !== 'object' || value === null || key === 'annotations') {
 				(this as GenericEsTreeNode)[key] = value;
 			} else if (Array.isArray(value)) {
+				// 如果是数组，那么创建数组并遍历上去
 				(this as GenericEsTreeNode)[key] = [];
 				// this.context.nodeConstructors 针对不同的语法书类型，进行不同的操作，比如挂载依赖等等
 				for (const child of value) {
+					// 循环然后各种new 各种类型的node，都是继成的NodeBase
 					(this as GenericEsTreeNode)[key].push(
 						child === null
 							? null
@@ -270,6 +289,7 @@ export class NodeBase implements ExpressionNode {
 					);
 				}
 			} else {
+				// 以上都不是的情况下，直接new
 				(this as GenericEsTreeNode)[key] = new (this.context.nodeConstructors[value.type] ||
 					this.context.nodeConstructors.UnknownNode)(value, this, this.scope);
 			}
@@ -291,6 +311,7 @@ export class NodeBase implements ExpressionNode {
 	}
 
 	shouldBeIncluded(context: InclusionContext): boolean {
+		// 如果已经inclued了，或者无副作用
 		return this.included || (!context.brokenFlow && this.hasEffects(createHasEffectsContext()));
 	}
 

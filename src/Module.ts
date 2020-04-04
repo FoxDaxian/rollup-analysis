@@ -229,7 +229,7 @@ export default class Module {
 	resolvedIds!: ResolvedIdMap;
 	scope!: ModuleScope;
 	sourcemapChain!: DecodedSourceMapOrMissing[];
-	sources = new Set<string>();
+	sources = new Set<string>(); // 当前文件依赖的文件。通过import 或者 export可以获的
 	syntheticNamedExports: boolean;
 	transformFiles?: EmittedFile[];
 	userChunkNames = new Set<string>();
@@ -264,6 +264,7 @@ export default class Module {
 		this.isEntryPoint = isEntry;
 	}
 
+	// 获取文件名，不包含后缀
 	basename() {
 		const base = basename(this.id);
 		const ext = extname(this.id);
@@ -439,6 +440,7 @@ export default class Module {
 		);
 	}
 
+	// 又是一波递归操作 wdnmd
 	getVariableForExportName(
 		name: string,
 		isExportAllSearch?: boolean,
@@ -524,24 +526,29 @@ export default class Module {
 
 	include(): void {
 		const context = createInclusionContext();
+		// 设置ast的include 为true
 		if (this.ast.shouldBeIncluded(context)) this.ast.include(context, false);
 	}
 
 	includeAllExports() {
+		// 当前模块是第一次，还没有执行过？才会进行这个判断
+		// 猜测： 为什么要进行这个判断呢？因为入口模块必须得执行啊
 		// 是否已经执行过(引入过)
 		if (!this.isExecuted) {
+			// 设置允许tree shaking
 			this.graph.needsTreeshakingPass = true;
 			// 标记当前模块是已执行过的
 			markModuleAndImpureDependenciesAsExecuted(this);
 		}
 
 		// 又创建了一个另一个上下文环境
+		// 这块还和treeshakingpass有关。。
 		const context = createInclusionContext();
 		// 遍历所有的导出的key
 		for (const exportName of this.getExports()) {
 			// 获取导出的内容
 			const variable = this.getVariableForExportName(exportName);
-			// 未实现，待猜想
+			// 肯定被集成的子类重写了啊。。
 			variable.deoptimizePath(UNKNOWN_PATH);
 			if (!variable.included) {
 				variable.include(context);
@@ -549,11 +556,11 @@ export default class Module {
 			}
 		}
 
-		// 遍历正则类导出？
+		// 处理re-exports
 		for (const name of this.getReexports()) {
 			// 获取导出的内容
 			const variable = this.getVariableForExportName(name);
-			// 未实现，待猜想
+			// 肯定被集成的子类重写了啊。。
 			variable.deoptimizePath(UNKNOWN_PATH);
 			if (!variable.included) {
 				variable.include(context);
@@ -574,7 +581,6 @@ export default class Module {
 	}
 
 	linkDependencies() {
-		// 这块没找到对应的sources赋值地
 		// 不过看代码可以发现，获取source id，然后再缓存的module中找到该模块，push到依赖中
 		for (const source of this.sources) {
 			// 获取依赖id
@@ -593,11 +599,12 @@ export default class Module {
 			}
 		}
 
-		// 看函数解析
+		// 添加import或者re-exports引入的模块
 		this.addModulesToImportDescriptions(this.importDescriptions);
 		this.addModulesToImportDescriptions(this.reexportDescriptions);
 
 		const externalExportAllModules: ExternalModule[] = [];
+		// 挂载模块的导出到当前模块上啊
 		// 找到导出所有资源的模块
 		for (const source of this.exportAllSources) {
 			const module = this.graph.moduleById.get(this.resolvedIds[source].id) as
@@ -617,6 +624,17 @@ export default class Module {
 		return magicString;
 	}
 
+	// {
+	// 	ast: ast!,
+	// 	code,
+	// 	customTransformCache,
+	// 	moduleSideEffects,
+	// 	originalCode,
+	// 	originalSourcemap,
+	// 	sourcemapChain,
+	// 	syntheticNamedExports,
+	// 	transformDependencies
+	// }
 	setSource({
 		ast,
 		code,
@@ -677,10 +695,10 @@ export default class Module {
 		timeStart('analyse ast', 3);
 
 		this.astContext = {
-			addDynamicImport: this.addDynamicImport.bind(this),
-			addExport: this.addExport.bind(this),
-			addImport: this.addImport.bind(this),
-			addImportMeta: this.addImportMeta.bind(this),
+			addDynamicImport: this.addDynamicImport.bind(this), // 动态导入
+			addExport: this.addExport.bind(this), // 导出
+			addImport: this.addImport.bind(this), // 导入
+			addImportMeta: this.addImportMeta.bind(this), // importmeta
 			annotations: (this.graph.treeshakingOptions && this.graph.treeshakingOptions.annotations)!,
 			code, // Only needed for debugging
 			deoptimizationTracker: this.graph.deoptimizationTracker,
@@ -720,6 +738,8 @@ export default class Module {
 
 		// 新建了个Program的实例对象给this.ast
 		// 这里进行了语法数的解析
+		// 上面挂在了各种ast node实例结果
+		// 解析的入口就是Program，脚本的跟的type是Program
 		this.ast = new Program(
 			this.esTreeAst,
 			{ type: 'Module', context: this.astContext }, // astContext里包含了当前module和当前module的相关信息，使用bind绑定当前上下文
@@ -796,6 +816,8 @@ export default class Module {
 		this.dynamicImports.push({ node, resolution: null });
 	}
 
+	// 处理不同的导出模式
+	// 导出的时候会赋到module上的exports上
 	private addExport(
 		node: ExportAllDeclaration | ExportNamedDeclaration | ExportDefaultDeclaration
 	) {
@@ -856,11 +878,20 @@ export default class Module {
 	}
 
 	private addImport(node: ImportDeclaration) {
+		// 比如引入了path模块
+		// source: {
+		// 	type: 'Literal',
+		// 	start: 'xx',
+		// 	end: 'xx',
+		// 	value: 'path',
+		// 	raw: '"path"'
+		// }
 		const source = node.source.value;
 		this.sources.add(source);
 		for (const specifier of node.specifiers) {
 			const localName = specifier.local.name;
 
+			// 重复引入了
 			if (this.importDescriptions[localName]) {
 				return this.error(
 					{
@@ -879,6 +910,8 @@ export default class Module {
 				: isNamespace
 				? '*'
 				: (specifier as ImportSpecifier).imported.name;
+
+			// 导入的模块的相关描述
 			this.importDescriptions[localName] = {
 				module: null as any, // filled in later
 				name,
@@ -895,14 +928,16 @@ export default class Module {
 	private addModulesToImportDescriptions(importDescription: {
 		[name: string]: ImportDescription | ReexportDescription;
 	}) {
-		// 没看明白有什么用，暂且翻译一下
+		// import 和 re-exports两种都是引入模块的方式，所以需要对依赖进行添加
+		// key是模块名，唯一的，比如path、glob等等
 		// 遍历importDescription数组
 		for (const name of Object.keys(importDescription)) {
-			// 获取每一个importDescription
+			// 获取每一个数据描述
 			const specifier = importDescription[name];
 			// 找到每一个importDescription的source id
 			const id = this.resolvedIds[specifier.source].id;
 			// 通过id找到模块，然后设置到每一个importDescription的module字段上
+			// 挂载模块到module上的import 和export 上
 			specifier.module = this.graph.moduleById.get(id) as Module | ExternalModule;
 		}
 	}

@@ -7,6 +7,8 @@ export function markModuleAndImpureDependenciesAsExecuted(baseModule: Module) {
 	const visitedModules = new Set<string>();
 	for (const module of modules) {
 		for (const dependency of module.dependencies) {
+			// 依赖们进行是否执行操作
+			// 条件为： 不是外部依赖，并且未执行，有副作用，没缓存过
 			if (
 				!(dependency instanceof ExternalModule) &&
 				!dependency.isExecuted &&

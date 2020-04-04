@@ -18,6 +18,7 @@ interface EntityPaths {
 
 export class PathTracker {
 	// 创建一个对象，指定原型上的[EntitiesKey]属性的值为Set实例
+	// 将ast node 进行出入栈操作的样子
 	entityPaths: EntityPaths = Object.create(null, { [EntitiesKey]: { value: new Set<Entity>() } });
 	// {
 	// 	  Symbol(Entities): new Set()

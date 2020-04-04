@@ -15,7 +15,7 @@ export default class ModuleScope extends ChildScope {
 	constructor(parent: GlobalScope, context: AstContext) {
 		super(parent);
 		this.context = context;
-		// 这里创建与Variable相关的内容
+		// 这里创建与Variable相关的内容??
 		this.variables.set('this', new LocalVariable('this', null, UNDEFINED_EXPRESSION, context));
 	}
 

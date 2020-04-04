@@ -13,7 +13,7 @@ import { LiteralValueOrUnknown, UNKNOWN_EXPRESSION, UnknownValue } from '../valu
 export default class Variable implements ExpressionEntity {
 	alwaysRendered = false;
 	exportName: string | null = null;
-	included = false;
+	included = false; // 当前是否被引入
 	isId = false;
 	isNamespace?: boolean;
 	isReassigned = false;
@@ -24,6 +24,7 @@ export default class Variable implements ExpressionEntity {
 	safeExportName: string | null = null;
 
 	constructor(name: string) {
+		// 模块的id 不包含后缀的字符串，也就是文件名
 		this.name = name;
 	}
 
