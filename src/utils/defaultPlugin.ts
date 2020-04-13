@@ -11,6 +11,7 @@ export function getRollupDefaultPlugin(preserveSymlinks: boolean): Plugin {
 		load(id) {
 			return readFile(id);
 		},
+		// 用来处理通过emitFile添加的urls或文件
 		resolveFileUrl({ relativePath, format }) {
 			// 不同format返回不同的文件解析地址
 			return relativeUrlMechanisms[format](relativePath);

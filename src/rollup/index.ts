@@ -298,7 +298,7 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 		// outputBundleWithPlaceholders是全部chunks和assets的集合
 		const outputBundleWithPlaceholders: OutputBundleWithPlaceholders = Object.create(null);
 
-		// 在fileEmitter上的私有output属性挂载资源，同步到 outputBundleWithPlaceholders 上，供后续使用
+		// 如果传递了之前打包的结果，视是否命中缓存条件进行缓存，在该方法中会进行提取
 		outputPluginDriver.setOutputBundle(outputBundleWithPlaceholders, assetFileNames);
 
 		let outputBundle;
@@ -321,12 +321,12 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 					chunk.exportMode = getExportMode(chunk, outputOptions, chunk.facadeModule!.id);
 			}
 
-			// 预渲染？
+			// ast 转换为 真实的代码
 			for (const chunk of chunks) {
 				chunk.preRender(outputOptions, inputBase);
 			}
 
-			// 优化chunk
+			// 实验性质的接口，文档未体现，优化chunk
 			if (!optimized && inputOptions.experimentalOptimizeChunks) {
 				optimizeChunks(chunks, outputOptions, inputOptions.chunkGroupingSize!, inputBase);
 				optimized = true;
@@ -341,20 +341,24 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 				outputBundleWithPlaceholders,
 				outputPluginDriver
 			);
-			// 设置好chunks的对象
+			// 挂载到outputBundleWithPlaceholders上
 			outputBundle = assignChunksToBundle(chunks, outputBundleWithPlaceholders);
 
+			// 到这里了，下面应该是写入文件的操作
 			// 语法树render操作
 			await Promise.all(
 				chunks.map(chunk => {
+					// 通过id获取之前设置到outputBundleWithPlaceholders上的一些属性
 					const outputChunk = outputBundleWithPlaceholders[chunk.id!] as OutputChunk;
 					return chunk
 						.render(outputOptions, addons, outputChunk, outputPluginDriver)
 						.then(rendered => {
 							// 引用类型，outputBundleWithPlaceholders上的也变化了，所以outputBundle也变化了，最后返回outputBundle
+							// 在这里给outputBundle挂载上了code和map，后面直接返回 outputBundle 了
 							outputChunk.code = rendered.code;
 							outputChunk.map = rendered.map;
 
+							// 调用生成的钩子函数
 							return outputPluginDriver.hookParallel('ongenerate', [
 								{ bundle: outputChunk, ...outputOptions },
 								outputChunk
@@ -411,6 +415,22 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 					message: 'You must specify "output.file" or "output.dir" for the build.'
 				});
 			}
+
+			// code: undefined as any, ==> 生成的代码
+			// dynamicImports: chunk.getDynamicImportIds(),
+			// exports: chunk.getExportNames(),
+			// facadeModuleId: facadeModule && facadeModule.id,
+			// fileName: chunk.id,
+			// imports: chunk.getImportIds(),
+			// isDynamicEntry: facadeModule !== null && facadeModule.dynamicallyImportedBy.length > 0,
+			// isEntry: facadeModule !== null && facadeModule.isEntryPoint,
+			// map: undefined, ==> 生成的sourcemap
+			// modules: chunk.renderedModules,
+			// get name() {
+			// 	return chunk.getChunkName();
+			// },
+			// type: 'chunk'
+
 			return generate(outputOptions, true, outputPluginDriver).then(async bundle => {
 				let chunkCount = 0;
 				for (const fileName of Object.keys(bundle)) {
@@ -438,10 +458,12 @@ export default async function rollup(rawInputOptions: GenericConfigObject): Prom
 				}
 				await Promise.all(
 					Object.keys(bundle).map(chunkId =>
-						writeOutputFile(result, bundle[chunkId], outputOptions, outputPluginDriver)
+						writeOutputFile(result, bundle[chunkId], outputOptions, outputPluginDriver) // => 写入操作
 					)
 				);
+				// 修改生成后的代码
 				await outputPluginDriver.hookParallel('writeBundle', [bundle]);
+				// 目前看来是供之后缓存用，提高构建速度
 				return createOutput(bundle);
 			});
 		}) as any

@@ -325,11 +325,12 @@ export default class Graph {
 			}
 
 			// 获取完module后，给引入的模块做标记
-			// TODO: 找个例子实验一波
+			// tree shaking
 			this.includeMarked(this.modules);
 
 			// 被include的都已经做好标记了，接下来生成chunks
 
+			// tree shaking之后的判断
 			// 检查所有没使用的模块，进行提示警告，但没有删除
 			// check for unused external imports
 			for (const externalModule of this.externalModules) externalModule.warnUnusedImports();
@@ -347,7 +348,7 @@ export default class Graph {
 			// inlineDynamicImports将动态导入的模块内敛到一个模块中，默认为false，不开启
 			// 如果都是取的默认值的话，进入判断
 			if (!this.preserveModules && !inlineDynamicImports) {
-				// 获取到了manualchunkmodule，即用户指定的模块组，然后通过生成唯一的hash值，并且迭代module，获取其依赖，给依赖们都添加上和这个唯一的hash，之后可以通过这个唯一的标志，将所有的相关模块都打到一个包里。
+				// 获取到了manualchunkmodule，即用户指定的模块组，然后通过生成唯一的hash值，并且迭代module，获取其依赖，给依赖们都添加上这个唯一的hash，之后可以通过这个唯一的标志，将所有的相关模块都打到一个包里。
 				// 那么，如果重复了呢？这块猜测是做了去重。还需要看后面的代码确认
 				assignChunkColouringHashes(entryModules, manualChunkModulesByAlias);
 			}
@@ -391,6 +392,7 @@ export default class Graph {
 
 				// 将同一hash值的chunks们排序后，添加到chunks中
 				for (const entryHashSum in chunkModules) {
+					// 所有相同hash值的模块
 					const chunkModulesOrdered = chunkModules[entryHashSum];
 					// 根据之前的设定的index排序，这个应该代表引入的顺序，或者执行的先后顺序
 					sortByExecutionOrder(chunkModulesOrdered);
@@ -406,11 +408,12 @@ export default class Graph {
 				// 将依赖挂载到每个chunk上
 				chunk.link();
 			}
-			// 过滤
+			// 过滤出 无用的片段
 			chunks = chunks.filter(isChunkRendered);
 			const facades: Chunk[] = [];
 			// 生成一个东西
 			for (const chunk of chunks) {
+				// TODO: 暂定
 				facades.push(...chunk.generateFacades());
 			}
 
@@ -454,7 +457,7 @@ export default class Graph {
 				timeStart(`treeshaking pass ${treeshakingPass}`, 3);
 				this.needsTreeshakingPass = false;
 				for (const module of modules) {
-					// 标记是需要的，不能shaking
+					// 给ast node标记上include
 					if (module.isExecuted) module.include();
 				}
 				timeEnd(`treeshaking pass ${treeshakingPass++}`, 3);

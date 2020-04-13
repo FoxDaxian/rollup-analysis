@@ -49,6 +49,10 @@ export default function renderChunk({
 
 	let inTransformBundle = false;
 	let inRenderChunk = true;
+	// 连续调用三个钩子函数
+	// !!! 注意部分api已被替换
+	// [参考](https://github.com/rollup/rollup/blob/d18cb37d7c328a63c36761583ce456275f164462/CHANGELOG.md)
+	// renderChunk: 处理每一个chunk
 	return outputPluginDriver
 		.hookReduceArg0('renderChunk', [code, renderChunk, options], renderChunkReducer)
 		.then(code => {

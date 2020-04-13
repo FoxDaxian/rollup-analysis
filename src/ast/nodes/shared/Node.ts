@@ -184,6 +184,7 @@ export class NodeBase implements ExpressionNode {
 		return UNKNOWN_EXPRESSION;
 	}
 
+	// 不同的 ast 节点类型有他们自己的副作用，有的有，有的没有
 	hasEffects(context: HasEffectsContext): boolean {
 		for (const key of this.keys) {
 			const value = (this as GenericEsTreeNode)[key];
@@ -305,13 +306,14 @@ export class NodeBase implements ExpressionNode {
 					if (child !== null) child.render(code, options);
 				}
 			} else {
+				// 调用不同ast type node提供的render方法，并对code(调用magicString提供的方法)进行重写覆盖
 				value.render(code, options);
 			}
 		}
 	}
 
 	shouldBeIncluded(context: InclusionContext): boolean {
-		// 如果已经inclued了，或者无副作用
+		// 整体已经inclued了，或者初始化并且有副作用
 		return this.included || (!context.brokenFlow && this.hasEffects(createHasEffectsContext()));
 	}
 

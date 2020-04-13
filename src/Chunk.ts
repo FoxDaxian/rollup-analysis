@@ -182,13 +182,17 @@ export default class Chunk {
 
 		this.isEmpty = true;
 		for (const module of orderedModules) {
+			// 是否可以tree shaking
 			if (this.isEmpty && module.isIncluded()) {
 				this.isEmpty = false;
 			}
+			// 获取之前挂载到模块上的用户自定义alias
 			if (module.manualChunkAlias) {
 				this.manualChunkAlias = module.manualChunkAlias;
 			}
+			// 将当前chunk挂载到模块上
 			module.chunk = this;
+			// 定义入口模块
 			if (
 				module.isEntryPoint ||
 				module.dynamicallyImportedBy.some(module => orderedModules.indexOf(module) === -1)
@@ -200,6 +204,7 @@ export default class Chunk {
 		const moduleForNaming =
 			this.entryModules[0] || this.orderedModules[this.orderedModules.length - 1];
 		if (moduleForNaming) {
+			// 命名
 			this.variableName = makeLegal(
 				basename(
 					moduleForNaming.chunkName ||
@@ -408,14 +413,17 @@ export default class Chunk {
 		throw new Error(`Internal Error: Could not find export name for variable ${variable.name}.`);
 	}
 
+	// 将依赖的chunks挂载到当前chunk上
 	link() {
 		const dependencies: Set<Chunk | ExternalModule> = new Set();
 		const dynamicDependencies: Set<Chunk | ExternalModule> = new Set();
+		// 所有的模块
 		for (const module of this.orderedModules) {
 			// 循环将依赖添加到dependencies 和 dynamicDependencies上
 			this.addDependenciesToChunk(module.getTransitiveDependencies(), dependencies);
 			this.addDependenciesToChunk(module.dynamicDependencies, dynamicDependencies);
-			// TODO: 装载吧？
+
+			// 处理导入和导出
 			this.setUpChunkImportsAndExportsForModule(module);
 		}
 		this.dependencies = Array.from(dependencies);
@@ -601,8 +609,10 @@ export default class Chunk {
 		// 分析chunk的依赖关系部分结束
 
 		// 对依赖进行执行顺序的排序
+		// 微观上来说：不然你先使用按个方法，然后再引入代码，那不就报错了吗
 		sortByExecutionOrder(this.dependencies);
 
+		// 这里暂时也不考虑，import()的时候才会奏效
 		// 动态引入的处理，到这里对动态引入的模块还是没有具象的画面，需要retry
 		this.prepareDynamicImports();
 
@@ -614,17 +624,21 @@ export default class Chunk {
 
 		for (const module of this.orderedModules) {
 			let renderedLength = 0;
-			// 当前模块是否被引用？是的话进行渲染工作了
+			// 当前模块是否被引用？否则不会打包到结果中
 			if (module.isIncluded()) {
+				// 利用magic string进行字符串的操作
 				// 代码渲染
 				const source = module.render(renderOptions).trim();
+				// 下面是对source的一些操作
 				if (options.compact && source.lastLine().indexOf('//') !== -1) source.append('\n');
 				// 获取模块命名空间
 				const namespace = module.getOrCreateNamespace();
 
 				if (namespace.included || source.length() > 0) {
 					renderedLength = source.length();
+					// 以map的形式设置到chunk上的renderedModuleSources上
 					this.renderedModuleSources.set(module, source);
+					// 将编译后代码添加到magicstring，以供后续添加到renderedSource上
 					magicString.addSource(source);
 					this.usedModules.push(module);
 
@@ -691,6 +705,7 @@ export default class Chunk {
 		timeStart('render format', 3);
 
 		const format = options.format as string;
+		// 通过格式获取操作不同格式的操作方法
 		const finalise = finalisers[format];
 		if (options.dynamicImportFunction && format !== 'es') {
 			this.graph.warn({
@@ -780,6 +795,7 @@ export default class Chunk {
 			renderChunk: outputChunk,
 			sourcemapChain: chunkSourcemapChain
 		}).then((code: string) => {
+			// 经过renderChunk、transformChunk、transformBundle处理后的代码
 			if (options.sourcemap) {
 				timeStart('sourcemap', 3);
 
@@ -788,6 +804,7 @@ export default class Chunk {
 				else if (options.dir) file = resolve(options.dir, this.id!);
 				else file = resolve(this.id!);
 
+				// 利用magicString生成sourcemap
 				const decodedMap = magicString.generateDecodedMap({});
 				map = collapseSourcemaps(
 					this,
@@ -848,6 +865,7 @@ export default class Chunk {
 		moduleDependencies: (Module | ExternalModule)[],
 		chunkDependencies: Set<Chunk | ExternalModule>
 	) {
+		// moduleDependencies： 模块依赖
 		for (const depModule of moduleDependencies) {
 			// 避免死循环
 			if (depModule.chunk === this) {
@@ -1136,7 +1154,7 @@ export default class Chunk {
 	private prepareDynamicImports() {
 		for (const module of this.orderedModules) {
 			for (const { node, resolution } of module.dynamicImports) {
-				// 被引用过过了，继续下次循环
+				// 没有被include，tree shaking 掉
 				if (!node.included) continue;
 				if (resolution instanceof Module) {
 					if (resolution.chunk === this) {

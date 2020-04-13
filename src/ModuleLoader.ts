@@ -404,7 +404,8 @@ export class ModuleLoader {
 				// 这个rollup模块可以理解为虚拟dom，vdom是将dom转为数据，rollup模块是将文件转为数据
 				// 好多都是这种思想，开发语言有中间机器码之说，babel有ast之说，mvvm框架有vdom之说，rollup有专用的模块之说。。。。
 				const cachedModule = this.graph.cachedModules.get(id);
-				// 如果和当前构建的模块一直，那么进行emitFile操作，然后返回缓存模块，提升性能
+				// 将上一次的打包结果传入的时候，触发缓存，然后会进入该条件。
+				// 如果和当前构建的模块一致，那么进行emitFile操作，然后返回缓存模块，提升性能
 				if (
 					cachedModule &&
 					!cachedModule.customTransformCache &&
@@ -436,6 +437,21 @@ export class ModuleLoader {
 				return transform(this.graph, sourceDescription, module); // transform钩子函数
 			})
 			.then((source: TransformModuleJSON | ModuleJSON) => {
+				// source是下面这样的结构:
+				// ====================
+				// { ast: undefined,
+				// 	code:
+				// 	 'function test() {\n    var name = \'test\';\n    console.log(123);\n}\nconst name = \'冯世雨\';\nfunction fn() {\n    console.log(name);\n}\n\nfn();\n',
+				// 	customTransformCache: false,
+				// 	moduleSideEffects: null,
+				// 	originalCode:
+				// 	 'function test() {\n    var name = \'test\';\n    console.log(123);\n}\nconst name = \'冯世雨\';\nfunction fn() {\n    console.log(name);\n}\n\nfn();\n',
+				// 	originalSourcemap: null,
+				// 	sourcemapChain: [],
+				// 	syntheticNamedExports: null,
+				// 	transformDependencies: []
+				// }
+				// ====================
 				// 到这一步，文件id(路径)已被解析成模块了
 
 				// transform的产出都会挂载到当前这个module上
